@@ -301,8 +301,8 @@ func validateListenerAbsenceClaim(is *ValidationIssues, c Claim, index int, r Ev
 	if s == nil || v.NamespaceEntityID != s.NamespaceEntityID || v.VantageID != visibility.VantageID || v.Protocol != s.Protocol || v.AddressFamily != s.AddressFamily || v.BindSemantics != s.BindSemantics {
 		addIssue(is, CodeVisibilityScopeMismatch, prefix+"/parameters", "listener absence parameters do not match visibility scope")
 	}
-	if !ListenerAbsenceEvidenceValid(r.Evidence, *visibility, v.Port) {
-		addIssue(is, CodeVisibilityInsufficientForAbsence, prefix+"/supporting_evidence", "listener absence evidence does not prove completed scoped inventory")
+	if code := ListenerAbsenceEvidenceIssueCode(r.Evidence, *visibility, v.Port); code != "" {
+		addIssue(is, code, prefix+"/supporting_evidence", "listener absence evidence does not prove completed scoped inventory")
 	}
 	for _, id := range visibility.BasisObservationIDs {
 		if !supportedObservations[id] {

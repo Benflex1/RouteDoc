@@ -2105,6 +2105,9 @@
           "$ref": "#/$defs/payloadListenerInventory"
         },
         {
+          "$ref": "#/$defs/payloadListenerInventoryResult"
+        },
+        {
           "$ref": "#/$defs/payloadProcessOwnership"
         },
         {
@@ -2497,6 +2500,66 @@
         "protocol",
         "bind_semantics",
         "port"
+      ]
+    },
+    "payloadListenerInventoryResult": {
+      "additionalProperties": false,
+      "properties": {
+        "address_family": {
+          "enum": [
+            "IPV4",
+            "IPV6"
+          ]
+        },
+        "bind_semantics": {
+          "enum": [
+            "EXACT",
+            "WILDCARD",
+            "LOOPBACK"
+          ]
+        },
+        "kind": {
+          "const": "LISTENER_INVENTORY_RESULT"
+        },
+        "matching_listener_count": {
+          "$ref": "#/$defs/nonNegative"
+        },
+        "namespace_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "port_end": {
+          "$ref": "#/$defs/u16"
+        },
+        "port_start": {
+          "$ref": "#/$defs/u16"
+        },
+        "protocol": {
+          "enum": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "namespace_entity_id",
+        "protocol",
+        "address_family",
+        "bind_semantics",
+        "port_start",
+        "port_end",
+        "matching_listener_count"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "namespace_entity_id",
+        "protocol",
+        "address_family",
+        "bind_semantics",
+        "port_start",
+        "port_end",
+        "matching_listener_count"
       ]
     },
     "payloadProcessOwnership": {

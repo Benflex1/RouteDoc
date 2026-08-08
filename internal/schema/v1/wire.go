@@ -260,6 +260,9 @@ type wPayload struct {
 	Protocol                        string   `json:"protocol,omitempty"`
 	BindSemantics                   string   `json:"bind_semantics,omitempty"`
 	Port                            uint16   `json:"port,omitempty"`
+	PortStart                       uint16   `json:"port_start,omitempty"`
+	PortEnd                         uint16   `json:"port_end,omitempty"`
+	MatchingListenerCount           uint64   `json:"matching_listener_count,omitempty"`
 	ProcessEntityID                 *string  `json:"process_entity_id,omitempty"`
 	FactKind                        string   `json:"fact_kind,omitempty"`
 	ContainerEntityID               string   `json:"container_entity_id,omitempty"`

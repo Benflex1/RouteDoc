@@ -15,7 +15,7 @@ import (
 	"routedoc/internal/rules"
 )
 
-var fixtureCases = []string{"valid-multibranch-no-global", "ipv4-success-ipv6-refused-partial", "tls-hostname-mismatch-http-skipped", "caddy-active-over-configured-intent", "upstream-refused-wrong-vantage", "listener-absent-complete-scope", "listener-absent-partial-scope", "two-proxy-upstreams-no-global", "operator-asserted-expected-path", "multiclaim-acyclic", "claim-forward-invalid", "claim-cycle-invalid", "provenance-missing-invalid", "provenance-recoverable-stored", "reevaluation-replacement-before", "reevaluation-replacement-after", "path-summary-only", "sensitive-derived-only", "exact-unknown-field-invalid", "newer-minor-ignored-fields", "newer-patch-known-readonly", "unknown-enum-invalid", "unknown-union-invalid", "missing-required-field-invalid", "unsupported-major-invalid"}
+var fixtureCases = []string{"valid-multibranch-no-global", "ipv4-success-ipv6-refused-partial", "tls-hostname-mismatch-http-skipped", "caddy-active-over-configured-intent", "upstream-refused-wrong-vantage", "listener-absent-complete-scope", "listener-absent-exact-zero-scope", "listener-absent-partial-scope", "two-proxy-upstreams-no-global", "operator-asserted-expected-path", "multiclaim-acyclic", "claim-forward-invalid", "claim-cycle-invalid", "provenance-missing-invalid", "provenance-recoverable-stored", "reevaluation-replacement-before", "reevaluation-replacement-after", "path-summary-only", "sensitive-derived-only", "exact-unknown-field-invalid", "newer-minor-ignored-fields", "newer-patch-known-readonly", "unknown-enum-invalid", "unknown-union-invalid", "missing-required-field-invalid", "unsupported-major-invalid"}
 
 type fixtureIssueJSON struct {
 	Code    string `json:"code"`
@@ -82,7 +82,7 @@ func TestFixture(t *testing.T) {
 		if len(issues) != 0 || !bytes.Equal(encoded, data) {
 			t.Fatalf("%s canonical roundtrip: %v", name, issues)
 		}
-		if name == "valid-multibranch-no-global" || name == "ipv4-success-ipv6-refused-partial" || name == "tls-hostname-mismatch-http-skipped" || name == "upstream-refused-wrong-vantage" || name == "listener-absent-complete-scope" || name == "listener-absent-partial-scope" || name == "two-proxy-upstreams-no-global" {
+		if name == "valid-multibranch-no-global" || name == "ipv4-success-ipv6-refused-partial" || name == "tls-hostname-mismatch-http-skipped" || name == "upstream-refused-wrong-vantage" || name == "listener-absent-complete-scope" || name == "listener-absent-exact-zero-scope" || name == "listener-absent-partial-scope" || name == "two-proxy-upstreams-no-global" {
 			base, issues := model.ValidateEvidenceRun(d.Run.Evidence)
 			if len(issues) != 0 {
 				t.Fatalf("%s base: %#v", name, issues)
@@ -173,6 +173,10 @@ func TestFixtureSemanticBoundaries(t *testing.T) {
 	complete := read("listener-absent-complete-scope")
 	if len(complete.Evidence.VisibilityAssessments) != 1 || complete.Evidence.VisibilityAssessments[0].Level != model.VisibilityCompleteForScope || len(complete.Findings) != 1 {
 		t.Fatal("complete listener scope fixture must produce absence evidence")
+	}
+	exact := read("listener-absent-exact-zero-scope")
+	if len(exact.Evidence.Observations) != 1 || exact.Evidence.Observations[0].Kind != model.ObservationListenerInventoryResult || len(exact.Findings) != 1 {
+		t.Fatal("exact listener scope fixture must use a direct zero-count inventory result")
 	}
 	partial := read("listener-absent-partial-scope")
 	if len(partial.Findings) != 0 {

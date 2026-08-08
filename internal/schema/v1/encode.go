@@ -427,6 +427,17 @@ func payloadWire(x model.ObservationPayload) wPayload {
 			w.BindSemantics = string(v.BindSemantics)
 			w.Port = v.Port
 		}
+	case model.ObservationListenerInventoryResult:
+		if x.ListenerInventoryResult != nil {
+			v := x.ListenerInventoryResult
+			w.NamespaceEntityID = string(v.NamespaceEntityID)
+			w.Protocol = string(v.Protocol)
+			w.AddressFamily = string(v.AddressFamily)
+			w.BindSemantics = string(v.BindSemantics)
+			w.PortStart = v.PortStart
+			w.PortEnd = v.PortEnd
+			w.MatchingListenerCount = v.MatchingListenerCount
+		}
 	case model.ObservationProcessOwnership:
 		if x.ProcessOwnership != nil {
 			v := x.ProcessOwnership

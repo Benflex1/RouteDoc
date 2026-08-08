@@ -124,6 +124,7 @@ func ValidateEvidenceRun(r EvidenceRun) (ValidatedEvidenceRun, ValidationIssues)
 		validateAssertion(&is, a, p)
 	}
 	entityIDs := map[EntityID]bool{}
+	entityValues := map[EntityID]Entity{}
 	for i, e := range r.Entities {
 		p := fmt.Sprintf("/entities/%d", i)
 		if !e.EntityID.Valid() {
@@ -133,6 +134,7 @@ func ValidateEvidenceRun(r EvidenceRun) (ValidatedEvidenceRun, ValidationIssues)
 			add(CodeDuplicateID, p+"/entity_id", "duplicate entity ID")
 		}
 		entityIDs[e.EntityID] = true
+		entityValues[e.EntityID] = e
 		validateEntity(&is, e, p)
 	}
 	validatePath(&is, r.ServicePath, entityIDs, assertionIDs, r.Observations, prefix("/service_path"))
@@ -175,6 +177,23 @@ func ValidateEvidenceRun(r EvidenceRun) (ValidatedEvidenceRun, ValidationIssues)
 		}
 		observationIDs[o.ObservationID] = true
 		validateObservation(&is, o, p, entityIDs, vantageIDs)
+		if o.Kind == ObservationListenerInventoryResult && o.Payload.ListenerInventoryResult != nil {
+			result := o.Payload.ListenerInventoryResult
+			if entity, ok := entityValues[result.NamespaceEntityID]; !ok || entity.Kind != EntityNetworkNamespace || entity.Identity.Namespace == nil {
+				add(CodeReferenceMissing, p+"/payload/namespace_entity_id", "listener inventory result namespace must be a network namespace")
+			} else if o.VantageID != nil {
+				var vantage *VantagePoint
+				for i := range r.VantagePoints {
+					if r.VantagePoints[i].VantageID == *o.VantageID {
+						vantage = &r.VantagePoints[i]
+						break
+					}
+				}
+				if vantage == nil || vantage.Kind != VantageKindHostNamespace || vantage.Identity.HostNamespace == nil || vantage.Identity.HostNamespace.NamespaceInode != entity.Identity.Namespace.NamespaceInode {
+					add(CodeVantageMismatch, p+"/payload/namespace_entity_id", "listener inventory result namespace does not correspond to vantage")
+				}
+			}
+		}
 	}
 	visibilityIDs := map[VisibilityID]bool{}
 	for i, v := range r.VisibilityAssessments {
@@ -186,7 +205,7 @@ func ValidateEvidenceRun(r EvidenceRun) (ValidatedEvidenceRun, ValidationIssues)
 			add(CodeDuplicateID, p+"/visibility_id", "duplicate visibility ID")
 		}
 		visibilityIDs[v.VisibilityID] = true
-		validateVisibility(&is, v, p, entityIDs, vantageIDs, observationIDs, r.Observations)
+		validateVisibility(&is, v, p, entityIDs, vantageIDs, observationIDs, r.Observations, r)
 	}
 	limitationIDs := map[LimitationID]bool{}
 	for i, l := range r.Limitations {

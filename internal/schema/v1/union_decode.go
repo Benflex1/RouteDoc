@@ -363,6 +363,8 @@ func payloadModel(w wPayload, is *model.ValidationIssues) model.ObservationPaylo
 		p.UpstreamSelection = v
 	case string(model.ObservationListenerInventory):
 		p.Listener = &model.ListenerInventoryEntry{ListenerEntityID: model.EntityID(w.ListenerEntityID), NamespaceEntityID: model.EntityID(w.NamespaceEntityID), Protocol: model.Transport(w.Protocol), AddressFamily: model.AddressFamily(w.AddressFamily), BindSemantics: model.BindSemantics(w.BindSemantics), Port: w.Port}
+	case string(model.ObservationListenerInventoryResult):
+		p.ListenerInventoryResult = &model.ListenerInventoryResult{NamespaceEntityID: model.EntityID(w.NamespaceEntityID), Protocol: model.Transport(w.Protocol), AddressFamily: model.AddressFamily(w.AddressFamily), BindSemantics: model.BindSemantics(w.BindSemantics), PortStart: w.PortStart, PortEnd: w.PortEnd, MatchingListenerCount: w.MatchingListenerCount}
 	case string(model.ObservationProcessOwnership):
 		p.ProcessOwnership = &model.ProcessOwnershipEntry{ListenerEntityID: model.EntityID(w.ListenerEntityID), Result: model.OwnershipResult(w.Result)}
 		if w.ProcessEntityID != nil {

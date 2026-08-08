@@ -50,6 +50,30 @@ func TestCanonicalEncodeStable(t *testing.T) {
 	}
 }
 
+func TestListenerInventoryResultCanonicalMemberOrder(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "testdata", "reports", "v1", "listener-absent-exact-zero-scope", "report.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, issues := Decode(data, ReadValidate)
+	if len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	v, issues := model.ValidatePersistedEvaluatedRun(d.Run)
+	if len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	encoded, issues := EncodeCanonical(v)
+	if len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	want := `"kind":"LISTENER_INVENTORY_RESULT","namespace_entity_id":"entity-namespace","protocol":"TCP","address_family":"IPV4","bind_semantics":"WILDCARD","port_start":443,"port_end":443,"matching_listener_count":0`
+	if !bytes.Contains(encoded, []byte(want)) {
+		t.Fatalf("listener result member order changed: %s", encoded)
+	}
+}
+
 func TestRequiredMissingEvidenceCanonicalJSONStableAcrossInsertionOrders(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "testdata", "reports", "v1", "listener-absent-complete-scope", "report.json")
 	data, err := os.ReadFile(path)

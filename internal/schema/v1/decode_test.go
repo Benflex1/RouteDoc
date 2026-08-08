@@ -38,6 +38,36 @@ func TestDecodeDuplicateMember(t *testing.T) {
 	}
 }
 
+func TestDecodeListenerInventoryResultPayload(t *testing.T) {
+	instance := minimalSchemaInstance()
+	instance["vantage_points"] = []interface{}{map[string]interface{}{"vantage_id": "vantage-000001", "kind": "HOST_NAMESPACE", "role": "ORIGIN_HOST", "display_label": "host", "identity": map[string]interface{}{"kind": "HOST_NAMESPACE", "namespace_inode": 7}, "establishment": "DIRECTLY_OBSERVED", "limitations": []interface{}{}}}
+	instance["entities"] = []interface{}{map[string]interface{}{"entity_id": "entity-namespace", "kind": "NETWORK_NAMESPACE", "display_label": "namespace", "identity": map[string]interface{}{"kind": "NETWORK_NAMESPACE", "namespace_inode": 7}}}
+	instance["observations"] = []interface{}{map[string]interface{}{"observation_id": "observation-000001", "kind": "LISTENER_INVENTORY_RESULT", "subject_entity_ids": []interface{}{"entity-namespace"}, "vantage_id": "vantage-000001", "observed_at": "2026-08-08T10:00:00Z", "payload": map[string]interface{}{"kind": "LISTENER_INVENTORY_RESULT", "namespace_entity_id": "entity-namespace", "protocol": "TCP", "address_family": "IPV4", "bind_semantics": "WILDCARD", "port_start": 443, "port_end": 443, "matching_listener_count": 0}, "acquisition_method": "SYNTHETIC_FIXTURE", "source_component": "SYNTHETIC_FIXTURE", "sensitivity": "SANITIZED_DERIVED", "limitations": []interface{}{}}}
+	data, err := json.Marshal(instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, issues := Decode(data, ReadValidate)
+	if len(issues) != 0 {
+		t.Fatalf("listener inventory result was not decoded: %v", issues)
+	}
+	if len(d.Run.Evidence.Observations) != 1 || d.Run.Evidence.Observations[0].Kind != model.ObservationKind("LISTENER_INVENTORY_RESULT") {
+		t.Fatalf("decoded observation kind: %#v", d.Run.Evidence.Observations)
+	}
+}
+
+func TestDecodeListenerInventoryResultRejectsUnknownPayloadMember(t *testing.T) {
+	instance := minimalSchemaInstance()
+	instance["observations"] = []interface{}{map[string]interface{}{"observation_id": "observation-000001", "kind": "LISTENER_INVENTORY_RESULT", "subject_entity_ids": []interface{}{}, "vantage_id": "vantage-000001", "observed_at": "2026-08-08T10:00:00Z", "payload": map[string]interface{}{"kind": "LISTENER_INVENTORY_RESULT", "namespace_entity_id": "entity-namespace", "protocol": "TCP", "address_family": "IPV4", "bind_semantics": "WILDCARD", "port_start": 443, "port_end": 443, "matching_listener_count": 0, "complete": true}, "acquisition_method": "SYNTHETIC_FIXTURE", "source_component": "SYNTHETIC_FIXTURE", "sensitivity": "SANITIZED_DERIVED", "limitations": []interface{}{}}}
+	data, err := json.Marshal(instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, issues := Decode(data, ReadValidate); !hasDecodeCode(issues, model.CodeUnknownField) {
+		t.Fatalf("unknown listener result payload member accepted: %v", issues)
+	}
+}
+
 func TestCompatibilityProjectionPreservesProvenanceAndStaysReadOnly(t *testing.T) {
 	for _, tc := range []struct {
 		version string

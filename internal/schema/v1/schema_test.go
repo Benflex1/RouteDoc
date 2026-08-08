@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -213,6 +214,53 @@ func TestClosedUnionSchemaCases(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestWireShapeIncludesListenerInventoryResult(t *testing.T) {
+	fields, ok := wireUnionShape["/observations/*/payload"]["LISTENER_INVENTORY_RESULT"]
+	if !ok {
+		t.Fatal("listener inventory result wire union case is missing")
+	}
+	for _, field := range []string{"kind", "namespace_entity_id", "protocol", "address_family", "bind_semantics", "port_start", "port_end", "matching_listener_count"} {
+		if !fields[field] {
+			t.Fatalf("listener inventory result field %q is missing", field)
+		}
+	}
+	want := []string{"kind", "namespace_entity_id", "protocol", "address_family", "bind_semantics", "port_start", "port_end", "matching_listener_count"}
+	if got := wireUnionRequired["/observations/*/payload"]["LISTENER_INVENTORY_RESULT"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("listener inventory result required order: %v", got)
+	}
+}
+
+func TestListenerInventoryResultSchemaContract(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "schema", "report", "v1.0.0", "schema.json")
+	c := jsonschema.NewCompiler()
+	schema, err := c.Compile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultObservation := func() map[string]interface{} {
+		return map[string]interface{}{"observation_id": "observation-000001", "kind": "LISTENER_INVENTORY_RESULT", "subject_entity_ids": []interface{}{}, "vantage_id": "vantage-000001", "observed_at": "2026-08-08T10:00:00Z", "payload": map[string]interface{}{"kind": "LISTENER_INVENTORY_RESULT", "namespace_entity_id": "entity-namespace", "protocol": "TCP", "address_family": "IPV4", "bind_semantics": "WILDCARD", "port_start": 443, "port_end": 443, "matching_listener_count": 0}, "acquisition_method": "SYNTHETIC_FIXTURE", "source_component": "SYNTHETIC_FIXTURE", "sensitivity": "SANITIZED_DERIVED", "limitations": []interface{}{}}
+	}
+	valid := minimalSchemaInstance()
+	valid["observations"] = []interface{}{resultObservation()}
+	if err := schema.Validate(valid); err != nil {
+		t.Fatalf("valid result rejected: %v", err)
+	}
+	for _, field := range []string{"namespace_entity_id", "protocol", "address_family", "bind_semantics", "port_start", "port_end", "matching_listener_count"} {
+		instance := minimalSchemaInstance()
+		instance["observations"] = []interface{}{resultObservation()}
+		delete(instance["observations"].([]interface{})[0].(map[string]interface{})["payload"].(map[string]interface{}), field)
+		if err := schema.Validate(instance); err == nil {
+			t.Errorf("missing %s accepted", field)
+		}
+	}
+	withExtra := minimalSchemaInstance()
+	withExtra["observations"] = []interface{}{resultObservation()}
+	withExtra["observations"].([]interface{})[0].(map[string]interface{})["payload"].(map[string]interface{})["complete"] = true
+	if err := schema.Validate(withExtra); err == nil {
+		t.Fatal("vague completion boolean accepted")
 	}
 }
 

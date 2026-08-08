@@ -231,6 +231,9 @@ func payloadCount(p ObservationPayload) int {
 	if p.Listener != nil {
 		n++
 	}
+	if p.ListenerInventoryResult != nil {
+		n++
+	}
 	if p.ProcessOwnership != nil {
 		n++
 	}
@@ -387,6 +390,25 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 				addIssue(is, CodeReferenceMissing, p+"/payload", "listener or namespace missing")
 			}
 		}
+	case ObservationListenerInventoryResult:
+		if o.Payload.ListenerInventoryResult != nil {
+			v := o.Payload.ListenerInventoryResult
+			if len(o.Limitations) != 0 {
+				addIssue(is, CodeInvalidValue, p+"/limitations", "completed listener inventory result cannot carry limitations")
+			}
+			if !v.NamespaceEntityID.Valid() {
+				addIssue(is, CodeInvalidValue, p+"/payload/namespace_entity_id", "invalid namespace entity ID")
+			}
+			if !v.Protocol.Valid() || !v.AddressFamily.Valid() || !v.BindSemantics.Valid() {
+				addIssue(is, CodeUnknownEnumValue, p+"/payload", "invalid listener inventory result enum")
+			}
+			if v.PortStart > v.PortEnd {
+				addIssue(is, CodeInvalidValue, p+"/payload/port_start", "listener inventory result port range is invalid")
+			}
+			if !entities[v.NamespaceEntityID] {
+				addIssue(is, CodeReferenceMissing, p+"/payload/namespace_entity_id", "namespace missing")
+			}
+		}
 	case ObservationProcessOwnership:
 		if o.Payload.ProcessOwnership != nil {
 			v := o.Payload.ProcessOwnership
@@ -421,7 +443,7 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 		}
 	}
 }
-func validateVisibility(is *ValidationIssues, v VisibilityAssessment, p string, entities map[EntityID]bool, vantages map[VantageID]bool, obs map[ObservationID]bool, all []Observation) {
+func validateVisibility(is *ValidationIssues, v VisibilityAssessment, p string, entities map[EntityID]bool, vantages map[VantageID]bool, obs map[ObservationID]bool, all []Observation, run EvidenceRun) {
 	if !v.SubjectKind.Valid() {
 		addIssue(is, CodeUnknownUnionKind, p+"/subject_kind", "unknown visibility subject")
 	}
@@ -460,6 +482,13 @@ func validateVisibility(is *ValidationIssues, v VisibilityAssessment, p string, 
 	}
 	if v.Level == VisibilityCompleteForScope && len(v.BasisObservationIDs) == 0 {
 		addIssue(is, CodeVisibilityInsufficientForAbsence, p+"/level", "complete visibility needs basis observations")
+	}
+	if v.Level == VisibilityCompleteForScope && len(v.BasisObservationIDs) > 0 {
+		if code := listenerVisibilityBasisIssueCode(run, v); code != "" && code != CodeVisibilityInsufficientForAbsence {
+			addIssue(is, code, p+"/basis_observation_ids", "complete visibility basis does not match listener scope")
+		} else if !ListenerVisibilityComplete(run, v) {
+			addIssue(is, CodeVisibilityInsufficientForAbsence, p+"/level", "complete visibility requires a qualifying completed inventory result")
+		}
 	}
 }
 func validateLimitation(is *ValidationIssues, l Limitation, p string) {
