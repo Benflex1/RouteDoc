@@ -1,9 +1,6 @@
 package model
 
-import (
-	"net/netip"
-	"time"
-)
+import "time"
 
 // ListenerVisibilityComplete applies the listener completeness contract. A
 // COMPLETE_FOR_SCOPE level is grounded only by a successful, typed inventory
@@ -75,7 +72,7 @@ func ListenerVisibilityComplete(r EvidenceRun, v VisibilityAssessment) bool {
 	if result.PortStart != s.PortStart || result.PortEnd != s.PortEnd {
 		return false
 	}
-	listenerKeys := make(map[concreteListenerIdentity]bool)
+	listenerKeys := make(map[EntityID]bool)
 	for _, entry := range entries {
 		key, ok := concreteListenerKey(r, entry)
 		if !ok {
@@ -86,7 +83,7 @@ func ListenerVisibilityComplete(r EvidenceRun, v VisibilityAssessment) bool {
 	if uint64(len(listenerKeys)) != result.MatchingListenerCount {
 		return false
 	}
-	owned := make(map[concreteListenerIdentity]bool)
+	owned := make(map[EntityID]bool)
 	for _, item := range ownership {
 		if item.Result != OwnershipOwned || item.ProcessEntityID == nil {
 			return false
@@ -275,22 +272,14 @@ func listenerObservationTimeCoherent(r EvidenceRun, observedAt, assessedAt time.
 	return delta <= time.Duration(r.Policy.CoherenceWindowNS)
 }
 
-type concreteListenerIdentity struct {
-	Namespace EntityID
-	Address   netip.Addr
-	Port      uint16
-	Protocol  Transport
-}
-
-func concreteListenerKey(r EvidenceRun, entry ListenerInventoryEntry) (concreteListenerIdentity, bool) {
+func concreteListenerKey(r EvidenceRun, entry ListenerInventoryEntry) (EntityID, bool) {
 	for _, entity := range r.Entities {
 		if entity.EntityID != entry.ListenerEntityID || entity.Kind != EntityListener || entity.Identity.Listener == nil {
 			continue
 		}
-		ep := entity.Identity.Listener.Endpoint
-		return concreteListenerIdentity{Namespace: entry.NamespaceEntityID, Address: ep.Address, Port: ep.Port, Protocol: ep.Transport}, true
+		return entity.EntityID, true
 	}
-	return concreteListenerIdentity{}, false
+	return "", false
 }
 
 func listenerNamespaceMatchesVantage(r EvidenceRun, namespaceID EntityID, vantageID VantageID) bool {

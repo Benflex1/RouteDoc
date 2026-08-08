@@ -179,7 +179,9 @@ func TestListenerProcessOwnershipDistinctIdentityAccounting(t *testing.T) {
 	r.Observations[0].Payload.ListenerInventoryResult.MatchingListenerCount = 2
 	r.Entities = append(r.Entities,
 		model.Entity{EntityID: "entity-listener-a", Kind: model.EntityListener, DisplayLabel: "listener a", Identity: model.EntityIdentity{Kind: model.EntityListener, Listener: &model.ListenerIdentity{Endpoint: model.EndpointIdentity{Address: netip.MustParseAddr("0.0.0.0"), Port: 443, Transport: model.TransportTCP}}}},
-		model.Entity{EntityID: "entity-listener-b", Kind: model.EntityListener, DisplayLabel: "listener b", Identity: model.EntityIdentity{Kind: model.EntityListener, Listener: &model.ListenerIdentity{Endpoint: model.EndpointIdentity{Address: netip.MustParseAddr("127.0.0.1"), Port: 443, Transport: model.TransportTCP}}}},
+		// Distinct entity IDs remain distinct concrete listeners even when their
+		// endpoint identities are equal (for example, shared-port sockets).
+		model.Entity{EntityID: "entity-listener-b", Kind: model.EntityListener, DisplayLabel: "listener b", Identity: model.EntityIdentity{Kind: model.EntityListener, Listener: &model.ListenerIdentity{Endpoint: model.EndpointIdentity{Address: netip.MustParseAddr("0.0.0.0"), Port: 443, Transport: model.TransportTCP}}}},
 		model.Entity{EntityID: "entity-process-a", Kind: model.EntityProcess, DisplayLabel: "process a", Identity: model.EntityIdentity{Kind: model.EntityProcess, Process: &model.ProcessIdentity{PID: 101}}},
 		model.Entity{EntityID: "entity-process-b", Kind: model.EntityProcess, DisplayLabel: "process b", Identity: model.EntityIdentity{Kind: model.EntityProcess, Process: &model.ProcessIdentity{PID: 102}}},
 	)
