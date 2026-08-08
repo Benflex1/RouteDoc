@@ -1,0 +1,6 @@
+justification.cycle /claims: claim support graph contains a cycle
+claim.invalid_support_level /claims/0/level: observed claim cannot rely only on another claim
+justification.missing /claims/0/supporting_evidence: claim has no admissible base support
+reference.forward_claim /claims/0/supporting_evidence/0: claim reference must point backward
+claim.invalid_support_level /claims/1/level: observed claim cannot rely only on another claim
+justification.missing /claims/1/supporting_evidence: claim has no admissible base support

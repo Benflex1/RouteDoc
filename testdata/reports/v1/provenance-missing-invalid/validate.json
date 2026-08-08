@@ -1,0 +1,1 @@
+{"valid":false,"issues":[{"code":"claim.rule_required","pointer":"/claims/0/rule_id","message":"claim rule is required"},{"code":"finding.rule_mismatch","pointer":"/findings/0/claim_ids/0","message":"finding claim has a different rule"}],"warnings":[]}

@@ -1,0 +1,2 @@
+claim.rule_required /claims/0/rule_id: claim rule is required
+finding.rule_mismatch /findings/0/claim_ids/0: finding claim has a different rule

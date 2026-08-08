@@ -1,0 +1,1 @@
+{"valid":false,"issues":[{"code":"claim.invalid_support_level","pointer":"/claims/0/level","message":"observed claim cannot rely only on another claim"},{"code":"reference.forward_claim","pointer":"/claims/0/supporting_evidence/0","message":"claim reference must point backward"}],"warnings":[]}

@@ -1,0 +1,13 @@
+RouteDoctor report
+Target: https://example.test:443 (PathSummary present=true root=true segments=0 trailing_slash=false query_present=false)
+Goal: HTTP_RESPONSE
+Vantages: 1  Branches: 2
+PRIMARY [BRANCH_PRIMARY] TCP connection refused from this vantage
+VANTAGE POINTS
+- vantage-000001 kind=CLIENT_NETWORK role=CLIENT label=client
+BRANCHES
+- branch-000001 goal=HTTP_RESPONSE edges=1
+- branch-000002 goal=HTTP_RESPONSE edges=1
+FINDINGS
+- finding-000001 TCP connection refused from this vantage level=OBSERVED rule=tcp.connection_refused/v1 selection=BRANCH_PRIMARY branches=[branch-000002] positions=[{branch-000002 0}] claims=[claim-000001]
+  claim claim-000001 statement=TCP_CONNECTION_REFUSED support=[OBSERVATION:observation-000002] contradiction=[]

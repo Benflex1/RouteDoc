@@ -1,0 +1,1 @@
+{"valid":false,"issues":[{"code":"schema.unknown_enum_value","pointer":"/goal/kind","message":"unknown goal enum"}],"warnings":[]}

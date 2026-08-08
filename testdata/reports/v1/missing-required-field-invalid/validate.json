@@ -1,0 +1,1 @@
+{"valid":false,"issues":[{"code":"schema.missing_required_field","pointer":"/producer","message":"required member is missing"}],"warnings":[]}

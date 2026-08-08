@@ -1,0 +1,1 @@
+{"valid":true,"issues":[],"warnings":[{"code":"schema.newer_minor_field_ignored","pointer":"/future_optional","message":"unknown member"}]}

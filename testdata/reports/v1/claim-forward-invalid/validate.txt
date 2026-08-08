@@ -1,0 +1,2 @@
+claim.invalid_support_level /claims/0/level: observed claim cannot rely only on another claim
+reference.forward_claim /claims/0/supporting_evidence/0: claim reference must point backward
