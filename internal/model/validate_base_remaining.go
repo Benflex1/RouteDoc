@@ -34,11 +34,21 @@ func validateCheckDefinition(is *ValidationIssues, c CheckDefinition, p string, 
 	if c.ExecutionPolicy.DeadlineNS < 0 {
 		addIssue(is, CodeInvalidValue, p+"/execution_policy/deadline_ns", "duration must be non-negative")
 	}
-	if err := ValidateScalar(c.ExecutionPolicy.DependencyFailureReasonCode); err != nil {
+	if err := validateReasonCode(c.ExecutionPolicy.DependencyFailureReasonCode); err != nil {
 		addIssue(is, CodeSensitiveDisallowedField, p+"/execution_policy/dependency_failure_reason_code", err.Error())
 	}
 	if !c.ExpectedCondition.Kind.Valid() {
 		addIssue(is, CodeUnknownUnionKind, p+"/expected_condition/kind", "unknown expected condition")
+	}
+	if c.ExpectedCondition.Hostname != nil {
+		if err := validateHostname(*c.ExpectedCondition.Hostname); err != nil {
+			addIssue(is, CodeSensitiveDisallowedField, p+"/expected_condition/hostname", err.Error())
+		}
+	}
+	if c.ExpectedCondition.Result != "" {
+		if err := validateSafeToken(c.ExpectedCondition.Result, 64); err != nil {
+			addIssue(is, CodeSensitiveDisallowedField, p+"/expected_condition/result", err.Error())
+		}
 	}
 }
 func validateCheckDAG(is *ValidationIssues, defs []CheckDefinition) {
@@ -89,6 +99,11 @@ func validateExecution(is *ValidationIssues, e CheckExecution, p string, entitie
 	}
 	if e.VantageID != nil && !vantages[*e.VantageID] {
 		addIssue(is, CodeReferenceMissing, p+"/vantage_id", "vantage missing")
+	}
+	if e.ReasonCode != nil {
+		if err := validateReasonCode(*e.ReasonCode); err != nil {
+			addIssue(is, CodeSensitiveDisallowedField, p+"/reason_code", err.Error())
+		}
 	}
 	valid := false
 	switch e.Lifecycle {
@@ -216,6 +231,9 @@ func payloadCount(p ObservationPayload) int {
 	if p.Listener != nil {
 		n++
 	}
+	if p.ListenerInventoryResult != nil {
+		n++
+	}
 	if p.ProcessOwnership != nil {
 		n++
 	}
@@ -264,6 +282,18 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if v.DurationNS < 0 {
 				addIssue(is, CodeInvalidValue, p+"/payload/duration_ns", "duration must be non-negative")
 			}
+			for field, value := range map[string]string{"protocol_version": v.ProtocolVersion, "cipher_suite": v.CipherSuite, "negotiated_alpn": v.NegotiatedALPN} {
+				if value != "" {
+					if err := validateSafeToken(value, 128); err != nil {
+						addIssue(is, CodeSensitiveDisallowedField, p+"/payload/"+field, err.Error())
+					}
+				}
+			}
+			if v.SNISent != "" {
+				if err := validateHostname(v.SNISent); err != nil {
+					addIssue(is, CodeSensitiveDisallowedField, p+"/payload/sni_sent", err.Error())
+				}
+			}
 			if !entities[v.PeerEntityID] {
 				addIssue(is, CodeReferenceMissing, p+"/payload/peer_entity_id", "entity missing")
 			}
@@ -280,6 +310,9 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if v.CertificateCount == 0 {
 				addIssue(is, CodeInvalidValue, p+"/payload/certificate_count", "certificate required")
 			}
+			if err := validateFingerprint(v.LeafSHA256); err != nil {
+				addIssue(is, CodeSensitiveDisallowedField, p+"/payload/leaf_sha256", err.Error())
+			}
 		}
 	case ObservationCertificateVerification:
 		if o.Payload.CertificateVerification != nil {
@@ -295,6 +328,9 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			}
 			if !entities[v.PeerEntityID] {
 				addIssue(is, CodeReferenceMissing, p+"/payload/peer_entity_id", "entity missing")
+			}
+			if err := validateHostname(v.VerifiedHostname); err != nil {
+				addIssue(is, CodeSensitiveDisallowedField, p+"/payload/verified_hostname", err.Error())
 			}
 		}
 	case ObservationHTTP:
@@ -327,7 +363,7 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if v.UpstreamEntityID != nil && !entities[*v.UpstreamEntityID] {
 				addIssue(is, CodeReferenceMissing, p+"/payload/upstream_entity_id", "entity missing")
 			}
-			if err := ValidateScalar(v.MatcherKind); err != nil {
+			if err := validateSafeToken(v.MatcherKind, 64); err != nil {
 				addIssue(is, CodeSensitiveDisallowedField, p+"/payload/matcher_kind", err.Error())
 			}
 		}
@@ -354,6 +390,25 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 				addIssue(is, CodeReferenceMissing, p+"/payload", "listener or namespace missing")
 			}
 		}
+	case ObservationListenerInventoryResult:
+		if o.Payload.ListenerInventoryResult != nil {
+			v := o.Payload.ListenerInventoryResult
+			if len(o.Limitations) != 0 {
+				addIssue(is, CodeInvalidValue, p+"/limitations", "completed listener inventory result cannot carry limitations")
+			}
+			if !v.NamespaceEntityID.Valid() {
+				addIssue(is, CodeInvalidValue, p+"/payload/namespace_entity_id", "invalid namespace entity ID")
+			}
+			if !v.Protocol.Valid() || !v.AddressFamily.Valid() || !v.BindSemantics.Valid() {
+				addIssue(is, CodeUnknownEnumValue, p+"/payload", "invalid listener inventory result enum")
+			}
+			if v.PortStart > v.PortEnd {
+				addIssue(is, CodeInvalidValue, p+"/payload/port_start", "listener inventory result port range is invalid")
+			}
+			if !entities[v.NamespaceEntityID] {
+				addIssue(is, CodeReferenceMissing, p+"/payload/namespace_entity_id", "namespace missing")
+			}
+		}
 	case ObservationProcessOwnership:
 		if o.Payload.ProcessOwnership != nil {
 			v := o.Payload.ProcessOwnership
@@ -378,12 +433,17 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			}
 		}
 	case ObservationCapabilityPermission:
-		if o.Payload.Capability != nil && !o.Payload.Capability.Result.Valid() {
-			addIssue(is, CodeUnknownEnumValue, p+"/payload/result", "unknown capability result")
+		if o.Payload.Capability != nil {
+			if !o.Payload.Capability.Result.Valid() {
+				addIssue(is, CodeUnknownEnumValue, p+"/payload/result", "unknown capability result")
+			}
+			if err := validateReasonCode(o.Payload.Capability.ReasonCode); err != nil {
+				addIssue(is, CodeSensitiveDisallowedField, p+"/payload/reason_code", err.Error())
+			}
 		}
 	}
 }
-func validateVisibility(is *ValidationIssues, v VisibilityAssessment, p string, entities map[EntityID]bool, vantages map[VantageID]bool, obs map[ObservationID]bool, all []Observation) {
+func validateVisibility(is *ValidationIssues, v VisibilityAssessment, p string, entities map[EntityID]bool, vantages map[VantageID]bool, obs map[ObservationID]bool, all []Observation, run EvidenceRun) {
 	if !v.SubjectKind.Valid() {
 		addIssue(is, CodeUnknownUnionKind, p+"/subject_kind", "unknown visibility subject")
 	}
@@ -422,6 +482,13 @@ func validateVisibility(is *ValidationIssues, v VisibilityAssessment, p string, 
 	}
 	if v.Level == VisibilityCompleteForScope && len(v.BasisObservationIDs) == 0 {
 		addIssue(is, CodeVisibilityInsufficientForAbsence, p+"/level", "complete visibility needs basis observations")
+	}
+	if v.Level == VisibilityCompleteForScope && len(v.BasisObservationIDs) > 0 {
+		if code := listenerVisibilityBasisIssueCode(run, v); code != "" && code != CodeVisibilityInsufficientForAbsence {
+			addIssue(is, code, p+"/basis_observation_ids", "complete visibility basis does not match listener scope")
+		} else if !ListenerVisibilityComplete(run, v) {
+			addIssue(is, CodeVisibilityInsufficientForAbsence, p+"/level", "complete visibility requires a qualifying completed inventory result")
+		}
 	}
 }
 func validateLimitation(is *ValidationIssues, l Limitation, p string) {

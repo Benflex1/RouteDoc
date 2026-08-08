@@ -63,6 +63,59 @@ func TestValidateEvidencePathSummary(t *testing.T) {
 		t.Fatal("inconsistent path accepted")
 	}
 }
+
+func TestValidateEvidencePathResolvesTypedReferences(t *testing.T) {
+	r := pathEvidence()
+	cases := []struct {
+		name string
+		ref  EvidenceRef
+		want ValidationCode
+	}{
+		{name: "missing observation", ref: ObservationRef("observation-999999"), want: CodeReferenceMissing},
+		{name: "observed edge claim target", ref: ClaimRef("claim-000001"), want: CodeReferenceKindMismatch},
+		{name: "mixed observed target", ref: EvidenceRef{Kind: EvidenceKindObservation, ObservationID: ptrObservation("observation-000001"), ClaimID: ptrClaim("claim-000001")}, want: CodeReferenceKindMismatch},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r.ServicePath.Edges[0].EvidenceRefs = []EvidenceRef{tc.ref}
+			_, issues := ValidateEvidenceRun(r)
+			if !hasCode(issues, tc.want) {
+				t.Fatalf("wanted %s: %#v", tc.want, issues)
+			}
+		})
+	}
+
+	r = pathEvidence()
+	r.ServicePath.Edges[0].Provenance = ProvenanceOperatorAsserted
+	r.ServicePath.Edges[0].EvidenceRefs = []EvidenceRef{ObservationRef("observation-000001")}
+	_, issues := ValidateEvidenceRun(r)
+	if !hasCode(issues, CodeReferenceKindMismatch) {
+		t.Fatalf("operator edge accepted observation ref: %#v", issues)
+	}
+
+	r = pathEvidence()
+	r.ServicePath.Edges[0].Provenance = ProvenanceOperatorAsserted
+	r.ServicePath.Edges[0].EvidenceRefs = []EvidenceRef{{Kind: EvidenceKindAssertion, AssertionID: ptrAssertion("assertion-999999")}}
+	_, issues = ValidateEvidenceRun(r)
+	if !hasCode(issues, CodeReferenceMissing) {
+		t.Fatalf("missing operator assertion accepted: %#v", issues)
+	}
+}
+
+func pathEvidence() EvidenceRun {
+	r := minimalEvidence()
+	r.Entities = []Entity{
+		{EntityID: "entity-a", Kind: EntityProxyInstance, DisplayLabel: "a", Identity: EntityIdentity{Kind: EntityProxyInstance, Opaque: &OpaqueEntityIdentity{SyntheticID: "proxy-a"}}},
+		{EntityID: "entity-b", Kind: EntityProxyInstance, DisplayLabel: "b", Identity: EntityIdentity{Kind: EntityProxyInstance, Opaque: &OpaqueEntityIdentity{SyntheticID: "proxy-b"}}},
+	}
+	r.Observations = []Observation{{ObservationID: "observation-000001", Kind: ObservationCapabilityPermission, SubjectEntityIDs: []EntityID{}, ObservedAt: r.StartedAt, Payload: ObservationPayload{Kind: ObservationCapabilityPermission, Capability: &CapabilityPermissionResult{CapabilityID: "capability-000001", Result: CapabilityAvailable}}, AcquisitionMethod: AcquisitionSyntheticFixture, SourceComponent: SourceSyntheticFixture, Sensitivity: SensitivitySanitizedDerived, Limitations: []Limitation{}}}
+	r.ServicePath.Edges = []PathEdge{{EdgeID: "edge-000001", From: "entity-a", To: "entity-b", Relation: RelationRoutesTo, Provenance: ProvenanceDirectlyObserved, EvidenceRefs: []EvidenceRef{ObservationRef("observation-000001")}}}
+	return r
+}
+
+func ptrObservation(v ObservationID) *ObservationID { return &v }
+func ptrClaim(v ClaimID) *ClaimID                   { return &v }
+func ptrAssertion(v AssertionID) *AssertionID       { return &v }
 func hasCode(v ValidationIssues, c ValidationCode) bool {
 	for _, i := range v {
 		if i.Code == c {

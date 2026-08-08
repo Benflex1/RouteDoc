@@ -38,6 +38,25 @@ func TestClosedUnionShape(t *testing.T) {
 	}
 }
 
+func TestListenerInventoryResultIsClosedModelCase(t *testing.T) {
+	if !ObservationKind("LISTENER_INVENTORY_RESULT").Valid() {
+		t.Fatal("listener inventory result is not a closed observation kind")
+	}
+	if _, ok := reflect.TypeOf(ObservationPayload{}).FieldByName("ListenerInventoryResult"); !ok {
+		t.Fatal("listener inventory result payload case is missing")
+	}
+	typ := reflect.TypeOf(ListenerInventoryResult{})
+	want := []string{"NamespaceEntityID", "Protocol", "AddressFamily", "BindSemantics", "PortStart", "PortEnd", "MatchingListenerCount"}
+	if typ.NumField() != len(want) {
+		t.Fatalf("listener inventory result payload has %d fields, want %d", typ.NumField(), len(want))
+	}
+	for i, name := range want {
+		if typ.Field(i).Name != name {
+			t.Fatalf("listener inventory result field %d is %s, want %s", i, typ.Field(i).Name, name)
+		}
+	}
+}
+
 func TestEvidenceRefConstructors(t *testing.T) {
 	r := ObservationRef(ObservationID("observation-000001"))
 	if r.Kind != EvidenceKindObservation || r.ObservationID == nil || r.ClaimID != nil {

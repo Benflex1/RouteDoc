@@ -303,6 +303,7 @@ const (
 	ObservationConfiguredProxyRoute    ObservationKind = "CONFIGURED_PROXY_ROUTE_SUMMARY"
 	ObservationUpstreamSelection       ObservationKind = "UPSTREAM_SELECTION_SUMMARY"
 	ObservationListenerInventory       ObservationKind = "LISTENER_INVENTORY_ENTRY"
+	ObservationListenerInventoryResult ObservationKind = "LISTENER_INVENTORY_RESULT"
 	ObservationProcessOwnership        ObservationKind = "PROCESS_OWNERSHIP_ENTRY"
 	ObservationDockerRuntime           ObservationKind = "DOCKER_RUNTIME_SUMMARY"
 	ObservationCapabilityPermission    ObservationKind = "CAPABILITY_PERMISSION_RESULT"
@@ -310,7 +311,7 @@ const (
 
 func (v ObservationKind) Valid() bool {
 	switch v {
-	case ObservationSystemResolution, ObservationTCPConnection, ObservationTLSTransport, ObservationTLSPeer, ObservationCertificateVerification, ObservationHTTP, ObservationActiveProxyRoute, ObservationConfiguredProxyRoute, ObservationUpstreamSelection, ObservationListenerInventory, ObservationProcessOwnership, ObservationDockerRuntime, ObservationCapabilityPermission:
+	case ObservationSystemResolution, ObservationTCPConnection, ObservationTLSTransport, ObservationTLSPeer, ObservationCertificateVerification, ObservationHTTP, ObservationActiveProxyRoute, ObservationConfiguredProxyRoute, ObservationUpstreamSelection, ObservationListenerInventory, ObservationListenerInventoryResult, ObservationProcessOwnership, ObservationDockerRuntime, ObservationCapabilityPermission:
 		return true
 	}
 	return false

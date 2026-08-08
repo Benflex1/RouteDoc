@@ -203,6 +203,17 @@ func (p wPayload) MarshalJSON() ([]byte, error) {
 			Bind      string `json:"bind_semantics"`
 			Port      uint16 `json:"port"`
 		}{p.Kind, p.ListenerEntityID, p.NamespaceEntityID, p.Protocol, p.AddressFamily, p.BindSemantics, p.Port})
+	case "LISTENER_INVENTORY_RESULT":
+		return marshalOrdered(struct {
+			Kind      string `json:"kind"`
+			Namespace string `json:"namespace_entity_id"`
+			Protocol  string `json:"protocol"`
+			Family    string `json:"address_family"`
+			Bind      string `json:"bind_semantics"`
+			PortStart uint16 `json:"port_start"`
+			PortEnd   uint16 `json:"port_end"`
+			Count     uint64 `json:"matching_listener_count"`
+		}{p.Kind, p.NamespaceEntityID, p.Protocol, p.AddressFamily, p.BindSemantics, p.PortStart, p.PortEnd, p.MatchingListenerCount})
 	case "PROCESS_OWNERSHIP_ENTRY":
 		return marshalOrdered(struct {
 			Kind     string  `json:"kind"`

@@ -1,1 +1,1 @@
-{"valid":false,"issues":[{"code":"schema.unknown_union_kind","pointer":"/entities/identity/kind","message":"unknown entity identity"}],"warnings":[]}
+{"valid":false,"issues":[{"code":"schema.unknown_union_kind","pointer":"/entities/0/identity/kind","message":"unknown union kind"}],"warnings":[]}

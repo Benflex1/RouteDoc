@@ -86,6 +86,9 @@ func CanonicalizeEvaluated(in EvaluatedRun) (EvaluatedRun, ValidationIssues) {
 		})
 		sortEvidenceRefs(out.Claims[i].SupportingEvidence)
 		sortEvidenceRefs(out.Claims[i].ContradictingEvidence)
+		sort.SliceStable(out.Claims[i].RequiredMissingEvidence, func(a, b int) bool {
+			return compareMissingEvidence(out.Claims[i].RequiredMissingEvidence[a], out.Claims[i].RequiredMissingEvidence[b]) < 0
+		})
 	}
 	for i := range out.Findings {
 		out.Findings[i].BranchIDs = append([]BranchID{}, out.Findings[i].BranchIDs...)
@@ -108,6 +111,135 @@ func CanonicalizeEvaluated(in EvaluatedRun) (EvaluatedRun, ValidationIssues) {
 		return out.Evidence.Limitations[i].LimitationID < out.Evidence.Limitations[j].LimitationID
 	})
 	return out, issues
+}
+
+func compareMissingEvidence(a, b MissingEvidenceRequirement) int {
+	if x, y := missingEvidenceKindOrder(a.Kind), missingEvidenceKindOrder(b.Kind); x != y {
+		return compareInt(x, y)
+	}
+	if x := compareOptionalString(observationKindString(a.ObservationKind), observationKindString(b.ObservationKind)); x != 0 {
+		return x
+	}
+	if x := compareOptionalString(visibilitySubjectKindString(a.VisibilitySubjectKind), visibilitySubjectKindString(b.VisibilitySubjectKind)); x != 0 {
+		return x
+	}
+	if x := compareVisibilityScope(a.VisibilityScope, b.VisibilityScope); x != 0 {
+		return x
+	}
+	return compareOptionalString(vantageIDString(a.VantageID), vantageIDString(b.VantageID))
+}
+
+func missingEvidenceKindOrder(v MissingEvidenceKind) int {
+	switch v {
+	case MissingObservationRequired:
+		return 0
+	case MissingVisibilityRequired:
+		return 1
+	case MissingVantageRequired:
+		return 2
+	default:
+		return 99
+	}
+}
+
+func compareInt(a, b int) int {
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return 0
+}
+
+func compareOptionalString(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "" {
+		return -1
+	}
+	if b == "" || a < b {
+		return -1
+	}
+	return 1
+}
+
+func observationKindString(v *ObservationKind) string {
+	if v == nil {
+		return ""
+	}
+	return string(*v)
+}
+func visibilitySubjectKindString(v *VisibilitySubjectKind) string {
+	if v == nil {
+		return ""
+	}
+	return string(*v)
+}
+func vantageIDString(v *VantageID) string {
+	if v == nil {
+		return ""
+	}
+	return string(*v)
+}
+
+func compareVisibilityScope(a, b *VisibilityScope) int {
+	if a == nil || b == nil {
+		if a == b {
+			return 0
+		}
+		if a == nil {
+			return -1
+		}
+		return 1
+	}
+	if x := compareOptionalString(a.Kind, b.Kind); x != 0 {
+		return x
+	}
+	if a.Listener == nil || b.Listener == nil {
+		if a.Listener == b.Listener {
+			return 0
+		}
+		if a.Listener == nil {
+			return -1
+		}
+		return 1
+	}
+	x, y := a.Listener, b.Listener
+	for _, cmp := range []int{
+		compareOptionalString(string(x.NamespaceEntityID), string(y.NamespaceEntityID)),
+		compareOptionalString(string(x.Protocol), string(y.Protocol)),
+		compareOptionalString(string(x.AddressFamily), string(y.AddressFamily)),
+		compareOptionalString(string(x.BindSemantics), string(y.BindSemantics)),
+		compareUint16(x.PortStart, y.PortStart),
+		compareUint16(x.PortEnd, y.PortEnd),
+		compareBool(x.ProcessOwnershipRequired, y.ProcessOwnershipRequired),
+	} {
+		if cmp != 0 {
+			return cmp
+		}
+	}
+	return 0
+}
+
+func compareUint16(a, b uint16) int {
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return 0
+}
+func compareBool(a, b bool) int {
+	if a == b {
+		return 0
+	}
+	if !a {
+		return -1
+	}
+	return 1
 }
 
 func sortLimitations(v []Limitation) {

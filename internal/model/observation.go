@@ -35,6 +35,7 @@ type ObservationPayload struct {
 	ConfiguredProxyRoute    *ProxyRouteSummary
 	UpstreamSelection       *UpstreamSelectionSummary
 	Listener                *ListenerInventoryEntry
+	ListenerInventoryResult *ListenerInventoryResult
 	ProcessOwnership        *ProcessOwnershipEntry
 	Docker                  *DockerRuntimeSummary
 	Capability              *CapabilityPermissionResult
@@ -99,6 +100,15 @@ type ListenerInventoryEntry struct {
 	AddressFamily     AddressFamily
 	BindSemantics     BindSemantics
 	Port              uint16
+}
+type ListenerInventoryResult struct {
+	NamespaceEntityID     EntityID
+	Protocol              Transport
+	AddressFamily         AddressFamily
+	BindSemantics         BindSemantics
+	PortStart             uint16
+	PortEnd               uint16
+	MatchingListenerCount uint64
 }
 type ProcessOwnershipEntry struct {
 	ListenerEntityID EntityID
