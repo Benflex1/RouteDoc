@@ -12,8 +12,8 @@ func (v ValidatedEvidenceRun) Value() EvidenceRun { return v.run }
 func ValidateEvidenceRun(r EvidenceRun) (ValidatedEvidenceRun, ValidationIssues) {
 	var is ValidationIssues
 	add := func(c ValidationCode, p, m string) { is = append(is, ValidationIssue{Code: c, Pointer: p, Message: m}) }
-	if r.ReportSchemaVersion != (SchemaVersion{1, 0, 0}) {
-		add(CodeInvalidValue, "/report_schema_version", "Milestone 0 requires schema 1.0.0")
+	if r.ReportSchemaVersion.Major != 1 {
+		add(CodeInvalidValue, "/report_schema_version", "unsupported schema major")
 	}
 	if !r.RunID.Valid() {
 		add(CodeInvalidValue, "/run_id", "invalid run ID")
@@ -107,7 +107,7 @@ func ValidateEvidenceRun(r EvidenceRun) (ValidatedEvidenceRun, ValidationIssues)
 		if !v.State.Valid() {
 			add(CodeUnknownEnumValue, p+"/state", "unknown capability state")
 		}
-		if err := ValidateScalar(v.ReasonCode); err != nil {
+		if err := validateReasonCode(v.ReasonCode); err != nil {
 			add(CodeSensitiveDisallowedField, p+"/reason_code", err.Error())
 		}
 	}
@@ -237,17 +237,14 @@ func validateTimes(is *ValidationIssues, start, finish time.Time, sp, fp string)
 	}
 }
 func validateTarget(t Target) error {
-	if err := ValidateScalar(t.Scheme); err != nil {
-		return err
-	}
-	if err := ValidateScalar(t.Hostname); err != nil {
-		return err
-	}
 	if t.Scheme != "http" && t.Scheme != "https" {
 		return fmt.Errorf("invalid scheme")
 	}
-	if t.Hostname == "" {
-		return fmt.Errorf("hostname required")
+	if err := validateHostname(t.Hostname); err != nil {
+		return err
+	}
+	if t.EffectivePort == 0 {
+		return fmt.Errorf("effective port required")
 	}
 	if !t.Path.Present && t.Path.IsRoot {
 		return fmt.Errorf("root path must be present")
@@ -270,7 +267,7 @@ func validateVantage(is *ValidationIssues, v VantagePoint, p string) {
 	if !v.Establishment.Valid() {
 		addIssue(is, CodeUnknownEnumValue, p+"/establishment", "unknown establishment")
 	}
-	if err := ValidateScalar(v.DisplayLabel); err != nil {
+	if err := validateDisplayLabel(v.DisplayLabel); err != nil {
 		addIssue(is, CodeSensitiveDisallowedField, p+"/display_label", err.Error())
 	}
 	if v.Limitations == nil {
@@ -293,7 +290,7 @@ func validateVantage(is *ValidationIssues, v VantagePoint, p string) {
 		addIssue(is, CodeInvalidValue, p+"/identity", "identity discriminant does not match vantage")
 	}
 	if v.Kind == VantageKindClientNetwork && v.Identity.ClientNetwork != nil {
-		if err := ValidateScalar(v.Identity.ClientNetwork.Label); err != nil {
+		if err := validateDisplayLabel(v.Identity.ClientNetwork.Label); err != nil {
 			addIssue(is, CodeSensitiveDisallowedField, p+"/identity/label", err.Error())
 		}
 	}
@@ -301,12 +298,15 @@ func validateVantage(is *ValidationIssues, v VantagePoint, p string) {
 		addIssue(is, CodeInvalidValue, p+"/identity/namespace_inode", "inode required")
 	}
 	if v.Kind == VantageKindContainerNamespace && v.Identity.ContainerNamespace != nil {
-		if v.Identity.ContainerNamespace.DaemonID == "" || v.Identity.ContainerNamespace.ContainerID == "" {
-			addIssue(is, CodeInvalidValue, p+"/identity", "container identity required")
+		if err := validateSafeIdentifier(v.Identity.ContainerNamespace.DaemonID); err != nil {
+			addIssue(is, CodeSensitiveDisallowedField, p+"/identity/daemon_id", err.Error())
+		}
+		if err := validateSafeIdentifier(v.Identity.ContainerNamespace.ContainerID); err != nil {
+			addIssue(is, CodeSensitiveDisallowedField, p+"/identity/container_id", err.Error())
 		}
 	}
 	if v.Kind == VantageKindUnknownNamespace && v.Identity.UnknownNamespace != nil {
-		if err := ValidateScalar(v.Identity.UnknownNamespace.ReasonCode); err != nil {
+		if err := validateReasonCode(v.Identity.UnknownNamespace.ReasonCode); err != nil {
 			addIssue(is, CodeSensitiveDisallowedField, p+"/identity/reason_code", err.Error())
 		}
 	}
@@ -364,6 +364,11 @@ func validateAssertion(is *ValidationIssues, a OperatorAssertion, p string) {
 			if h.ExpectationKind == ExpectationHeaderPresent && (h.HeaderName == nil || *h.HeaderName == "") {
 				addIssue(is, CodeInvalidValue, p+"/parameters/header_name", "header name required")
 			}
+			if h.HeaderName != nil {
+				if err := validateHeaderName(*h.HeaderName); err != nil {
+					addIssue(is, CodeSensitiveDisallowedField, p+"/parameters/header_name", err.Error())
+				}
+			}
 		}
 	case AssertionConfigSourceSelection:
 		if a.Parameters.ConfigSource == nil || !a.Parameters.ConfigSource.ComponentKind.Valid() || !a.Parameters.ConfigSource.SourceKind.Valid() {
@@ -371,10 +376,10 @@ func validateAssertion(is *ValidationIssues, a OperatorAssertion, p string) {
 		}
 	case AssertionPrivateRedirectTransitionAllowed:
 		if a.Parameters.PrivateRedirect != nil {
-			if err := ValidateScalar(a.Parameters.PrivateRedirect.FromAddressScope); err != nil {
+			if err := validateSafeToken(a.Parameters.PrivateRedirect.FromAddressScope, 32); err != nil {
 				addIssue(is, CodeSensitiveDisallowedField, p+"/parameters/from_address_scope", err.Error())
 			}
-			if err := ValidateScalar(a.Parameters.PrivateRedirect.ToAddressScope); err != nil {
+			if err := validateSafeToken(a.Parameters.PrivateRedirect.ToAddressScope, 32); err != nil {
 				addIssue(is, CodeSensitiveDisallowedField, p+"/parameters/to_address_scope", err.Error())
 			}
 		}
@@ -421,7 +426,7 @@ func validateEntity(is *ValidationIssues, e Entity, p string) {
 	if !e.Kind.Valid() {
 		addIssue(is, CodeUnknownUnionKind, p+"/kind", "unknown entity kind")
 	}
-	if err := ValidateScalar(e.DisplayLabel); err != nil {
+	if err := validateDisplayLabel(e.DisplayLabel); err != nil {
 		addIssue(is, CodeSensitiveDisallowedField, p+"/display_label", err.Error())
 	}
 	if unionEntityCount(e.Identity) != 1 || e.Identity.Kind != e.Kind {
@@ -437,8 +442,26 @@ func validateEntity(is *ValidationIssues, e Entity, p string) {
 		validateEndpoint(is, &e.Identity.Listener.Endpoint, p+"/identity/endpoint")
 	}
 	if e.Kind == EntityHostname && e.Identity.Hostname != nil {
-		if err := ValidateScalar(e.Identity.Hostname.Hostname); err != nil {
+		if err := validateHostname(e.Identity.Hostname.Hostname); err != nil {
 			addIssue(is, CodeSensitiveDisallowedField, p+"/identity/hostname", err.Error())
+		}
+	}
+	if e.Kind == EntityTLSPeer && e.Identity.TLSPeer != nil {
+		if err := validateFingerprint(e.Identity.TLSPeer.Fingerprint); err != nil {
+			addIssue(is, CodeSensitiveDisallowedField, p+"/identity/fingerprint", err.Error())
+		}
+	}
+	if (e.Kind == EntityProxyInstance || e.Kind == EntityProxyRoute) && e.Identity.Opaque != nil {
+		if err := validateSafeIdentifier(e.Identity.Opaque.SyntheticID); err != nil {
+			addIssue(is, CodeSensitiveDisallowedField, p+"/identity/synthetic_id", err.Error())
+		}
+	}
+	if e.Kind == EntityContainer && e.Identity.Container != nil {
+		if err := validateSafeIdentifier(e.Identity.Container.RuntimeID); err != nil {
+			addIssue(is, CodeSensitiveDisallowedField, p+"/identity/runtime_id", err.Error())
+		}
+		if err := validateSafeIdentifier(e.Identity.Container.ContainerID); err != nil {
+			addIssue(is, CodeSensitiveDisallowedField, p+"/identity/container_id", err.Error())
 		}
 	}
 }
@@ -454,6 +477,10 @@ func validateEndpoint(is *ValidationIssues, e *EndpointIdentity, p string) {
 	}
 }
 func validatePath(is *ValidationIssues, p ServicePath, entities map[EntityID]bool, assertions map[AssertionID]bool, obs []Observation, base string) {
+	observations := map[ObservationID]bool{}
+	for _, o := range obs {
+		observations[o.ObservationID] = true
+	}
 	for i, n := range p.Nodes {
 		q := fmt.Sprintf("%s/nodes/%d", base, i)
 		if !entities[n.EntityID] {
@@ -487,14 +514,26 @@ func validatePath(is *ValidationIssues, p ServicePath, entities map[EntityID]boo
 		}
 		for j, r := range e.EvidenceRefs {
 			qq := fmt.Sprintf("%s/evidence_refs/%d", q, j)
-			if e.Provenance == ProvenanceOperatorAsserted && r.Kind != EvidenceKindAssertion {
-				addIssue(is, CodeReferenceKindMismatch, qq, "operator edge requires assertion")
+			if !r.Kind.Valid() || refTargetCount(r) != 1 {
+				addIssue(is, CodeReferenceKindMismatch, qq, "reference must have exactly one target")
+				continue
 			}
-			if e.Provenance != ProvenanceOperatorAsserted && r.Kind != EvidenceKindObservation {
-				addIssue(is, CodeReferenceKindMismatch, qq, "observed edge requires observation")
+			if e.Provenance == ProvenanceOperatorAsserted {
+				if r.Kind != EvidenceKindAssertion {
+					addIssue(is, CodeReferenceKindMismatch, qq, "operator edge requires assertion")
+					continue
+				}
+				if r.AssertionID == nil || !assertions[*r.AssertionID] {
+					addIssue(is, CodeReferenceMissing, qq, "assertion missing")
+				}
+				continue
 			}
-			if r.Kind == EvidenceKindAssertion && (r.AssertionID == nil || !assertions[*r.AssertionID]) {
-				addIssue(is, CodeReferenceMissing, qq, "assertion missing")
+			if r.Kind != EvidenceKindObservation {
+				addIssue(is, CodeReferenceKindMismatch, qq, "base path edge requires observation")
+				continue
+			}
+			if r.ObservationID == nil || !observations[*r.ObservationID] {
+				addIssue(is, CodeReferenceMissing, qq, "observation missing")
 			}
 		}
 	}
