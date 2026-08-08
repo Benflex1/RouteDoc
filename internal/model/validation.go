@@ -112,3 +112,101 @@ func ValidateScalar(s string) error {
 	}
 	return nil
 }
+
+func validateHostname(s string) error {
+	if s == "" || len(s) > 253 || strings.ToLower(s) != s {
+		return errors.New("hostname must be a normalized lowercase hostname")
+	}
+	for _, label := range strings.Split(s, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return errors.New("hostname has an invalid label")
+		}
+		for _, r := range label {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+				return errors.New("hostname has an invalid character")
+			}
+		}
+	}
+	return nil
+}
+
+func validateReasonCode(s string) error {
+	if s == "" {
+		return nil
+	}
+	if len(s) > 64 || s[0] < 'a' || s[0] > 'z' {
+		return errors.New("reason code must be bounded lowercase snake case")
+	}
+	for _, r := range s[1:] {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' {
+			return errors.New("reason code must be bounded lowercase snake case")
+		}
+	}
+	return nil
+}
+
+func validateFingerprint(s string) error {
+	if len(s) != len("sha256:")+64 || !strings.HasPrefix(s, "sha256:") {
+		return errors.New("fingerprint must be a SHA-256 hex fingerprint")
+	}
+	for _, r := range s[len("sha256:"):] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return errors.New("fingerprint must be a SHA-256 hex fingerprint")
+		}
+	}
+	return nil
+}
+
+func validateSafeIdentifier(s string) error {
+	if s == "" || len(s) > 128 {
+		return errors.New("identifier must be bounded")
+	}
+	for i, r := range s {
+		if (i == 0 && !isASCIIAlphaNumeric(r)) || (i > 0 && !isASCIIAlphaNumeric(r) && r != '-' && r != '_' && r != '.') {
+			return errors.New("identifier has an invalid character")
+		}
+	}
+	return nil
+}
+
+func isASCIIAlphaNumeric(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+}
+
+func validateDisplayLabel(s string) error {
+	if s == "" || len(s) > 128 || strings.TrimSpace(s) != s {
+		return errors.New("display label must be bounded and sanitized")
+	}
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == ' ' || r == '.' || r == '_' || r == '-' || r == '(' || r == ')' {
+			continue
+		}
+		return errors.New("display label contains an unsafe character")
+	}
+	return nil
+}
+
+func validateSafeToken(s string, max int) error {
+	if s == "" || len(s) > max {
+		return errors.New("token must be bounded")
+	}
+	for i, r := range s {
+		if (i == 0 && !unicode.IsLetter(r) && !unicode.IsDigit(r)) || (!unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("_.:+/-", r)) {
+			return errors.New("token contains an unsafe character")
+		}
+	}
+	return nil
+}
+
+func validateHeaderName(s string) error {
+	if s == "" || len(s) > 128 {
+		return errors.New("header name must be bounded")
+	}
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("!#$%&'*+-.^_`|~", r) {
+			continue
+		}
+		return errors.New("header name contains an unsafe character")
+	}
+	return nil
+}

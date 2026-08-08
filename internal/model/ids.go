@@ -113,8 +113,22 @@ func ParseLimitationID(s string) (LimitationID, error) {
 }
 func ParseRuleID(s string) (RuleID, error) {
 	var zero RuleID
-	if !utf8.ValidString(s) || len(s) == 0 || strings.ContainsAny(s, " \t\r\n\x00") || !strings.Contains(s, "/v") {
+	if !utf8.ValidString(s) || len(s) == 0 {
 		return zero, fmt.Errorf("invalid rule ID")
+	}
+	parts := strings.Split(s, "/v")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || parts[1][0] == '0' {
+		return zero, fmt.Errorf("invalid rule ID")
+	}
+	for _, r := range parts[1] {
+		if r < '0' || r > '9' {
+			return zero, fmt.Errorf("invalid rule ID")
+		}
+	}
+	for _, r := range parts[0] {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && !strings.ContainsRune("_.-", r) {
+			return zero, fmt.Errorf("invalid rule ID")
+		}
 	}
 	return RuleID(s), nil
 }
