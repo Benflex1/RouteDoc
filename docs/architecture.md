@@ -685,13 +685,17 @@ sufficient for the listener-existence dimension; ownership evidence is not
 required. When `process_ownership_required = true` and the qualifying result
 has a nonzero count, its port range MUST exactly equal the assessment's port
 range and `basis_observation_ids` MUST additionally contain distinct positive
-`LISTENER_INVENTORY_ENTRY` observations accounting for exactly that count and
-matching `PROCESS_OWNERSHIP_ENTRY` observations for every such entry. Exact
-range is required in this case because a nonzero aggregate over a broader range
-does not state how many listeners fall inside the narrower assessment. When a
-qualifying result has count zero, there is no matching listener whose ownership
-must be established, so no ownership entry is required. A completed listener
-inventory result never by itself proves process ownership.
+`LISTENER_INVENTORY_ENTRY` observations whose distinct concrete listener
+identities account for exactly that count, plus matching
+`PROCESS_OWNERSHIP_ENTRY` observations for every such listener. Distinct
+observation IDs do not establish distinct listeners: multiple entries or
+ownership observations describing the same concrete listener identity count
+once. Exact range is required in this case because a nonzero aggregate over a
+broader range does not state how many listeners fall inside the narrower
+assessment. When a qualifying result has count zero, there is no matching
+listener whose ownership must be established, so no ownership entry is
+required. A completed listener inventory result never by itself proves process
+ownership.
 
 A negative rule MUST name the visibility dimensions it requires and MUST link
 to a matching, properly grounded `COMPLETE_FOR_SCOPE` assessment. Partial or
@@ -1035,41 +1039,56 @@ The exact persisted contract for a `NO_MATCHING_LISTENER_VISIBLE` claim, and
 therefore for any finding that cites it, is:
 
 1. The target proposition identifies one vantage, namespace, protocol, address
-   family, bind semantics, and inclusive port range.
+   family, bind semantics, and the existing single target `port` value `P`.
+   This contract does not add `port_start` or `port_end` to the claim payload.
+   For comparison with ranged inventory results and visibility scopes, the
+   claim port is treated as the degenerate inclusive range `[P, P]`.
 2. `supporting_evidence` cites a `VISIBILITY` reference to a
    `COMPLETE_FOR_SCOPE` assessment at the same vantage. The assessment's
    namespace, protocol, address family, and bind semantics exactly equal the
-   target's, and its port range contains the target's entire port range.
+   target's, and its inclusive port range contains `[P, P]`, equivalently
+   `scope.port_start <= P` and `scope.port_end >= P`.
 3. `supporting_evidence` also cites an `OBSERVATION` reference to a
    `LISTENER_INVENTORY_RESULT` named in that assessment's
    `basis_observation_ids`. The result has the same vantage, namespace,
    protocol, address family, and bind semantics as the assessment, its port
    range contains the assessment's entire port range, and
    `matching_listener_count` is zero.
-4. No coherent `LISTENER_INVENTORY_ENTRY` positively identifies a listener
-   matching the target's vantage, namespace, protocol, address family, bind
-   semantics, and port range. Such an entry is contradicting evidence and the
-   evaluator MUST withhold the absence claim; a persisted report containing
-   the claim despite that contradiction is invalid.
-5. All ordinary reference-resolution, typed-vantage, namespace identity,
+4. No temporally coherent `LISTENER_INVENTORY_ENTRY` positively identifies a
+   listener matching the target's vantage, namespace, protocol, address
+   family, bind semantics, and port `P`.
+5. No temporally coherent `LISTENER_INVENTORY_RESULT` with a nonzero count has
+   the target's exact vantage, namespace, protocol, address family, and bind
+   semantics and a represented port range contained by `[P, P]`. Because the
+   target is a single port, this containment requires
+   `result.port_start = P` and `result.port_end = P`. Such a result directly
+   establishes one or more matching listeners at the claimed-absent port even
+   when no individual `LISTENER_INVENTORY_ENTRY` is persisted.
+6. Evidence matching item 4 or 5 is contradicting evidence. The evaluator MUST
+   withhold the absence claim; a persisted report containing the claim despite
+   either contradiction is invalid even if the observation was omitted from
+   the claim's `contradicting_evidence` references.
+7. All ordinary reference-resolution, typed-vantage, namespace identity,
    branch, temporal-coherence, support-level, rule-provenance, and selection
    requirements continue to apply.
 
-Scope containment is deliberately limited. For port ranges, `R` contains `T`
-only when `R.port_start <= T.port_start` and
-`R.port_end >= T.port_end`; vantage, namespace, protocol, address family, and
-bind semantics require exact equality and are never widened or substituted.
-A zero-count result over a containing port range therefore proves absence in a
-narrower target range. A result with a nonzero count proves that enumeration
-completed for its represented scope, but the aggregate does not locate those
-listeners: it cannot by itself prove absence for any narrower range. An exact
-nonzero result contradicts absence for that exact scope.
+Scope containment is deliberately directional. For absence proof, a result or
+visibility port range contains claim port `P` when
+`port_start <= P <= port_end`; a zero-count result such as `1..65535` may
+therefore prove absence at port `443`, while `1..100` cannot. For presence
+contradiction, the nonzero result's represented range must instead be contained
+by the claim's degenerate `[P, P]` range. A broader nonzero aggregate that
+merely contains `P` does not locate its listeners and is not by itself
+contradictory. Vantage, namespace, protocol, address family, and bind semantics
+require exact equality in both directions and are never widened or
+substituted.
 
 The evaluator and persisted-report validator MUST apply this same contract.
 The validator does not merely check that referenced IDs resolve: it rejects a
 stored absence claim or finding whose visibility is ungrounded, whose result
-does not cover the target, whose result count is not zero, or whose target is
-contradicted by positive listener evidence.
+does not cover the target, whose required supporting result count is not zero,
+or whose target is contradicted by a positive listener entry or a qualifying
+coherent nonzero inventory result.
 
 ## 10. Blocker ordering and selection
 
@@ -1498,13 +1517,17 @@ Required CI does not use the public Internet.
 - re-evaluation replacement and deterministic generated-ID tests;
 - vantage mismatch rejection;
 - scoped completeness tests proving that listener visibility is grounded only
-  by a qualifying `LISTENER_INVENTORY_RESULT`, that a zero-count containing
-  scope can support a narrower absence, and that partial visibility, a positive
-  entry, or an execution lifecycle cannot support completeness;
+  by a qualifying `LISTENER_INVENTORY_RESULT`, that a zero-count range
+  containing claim port `P` can support absence at `P`, and that partial
+  visibility, a positive entry, or an execution lifecycle cannot support
+  completeness;
 - listener-absence contract tests for wrong vantage, namespace, protocol,
-  address family, bind semantics, port coverage, nonzero covering counts, and
-  contradictory positive target listeners, applied identically to evaluator
-  output and persisted-report validation;
+  address family, bind semantics, port coverage, nonzero results offered as
+  absence proof, contradictory positive target listeners, and exact-port
+  nonzero results with no individual listener entry. Tests MUST also prove that
+  a broader nonzero aggregate is not treated as locating a listener at `P`.
+  These cases apply identically to evaluator output and persisted-report
+  validation;
 - branch-local and global-primary selection tests;
 - stable ordering under randomized insertion and completion order;
 - redaction and sensitive-field allowlist tests;
@@ -1591,11 +1614,11 @@ The implementation agent MUST deliver:
 10. The exact evidence contracts in section 9 for those rules. The listener
     rule and persisted-report validator MUST enforce the identical
     `NO_MATCHING_LISTENER_VISIBLE` contract, including the direct result,
-    visibility grounding, scope containment/equality, zero-count,
-    contradiction, process-ownership, vantage, and temporal-coherence
-    requirements. Tests MUST prove that the listener rule does not fire and a
-    stored claim does not validate when any required element is absent or
-    mismatched.
+    visibility grounding, range coverage of the existing single claim port,
+    zero-count, contradiction, process-ownership, vantage, and
+    temporal-coherence requirements. Tests MUST prove that the listener rule
+    does not fire and a stored claim does not validate when any required
+    element is absent or mismatched.
 11. A renderer for deterministic concise human output and a verbose renderer
     that exposes vantage, branch, level, rule ID, evidence links, and
     limitations.
@@ -1626,7 +1649,7 @@ The implementation agent MUST deliver:
       complete-for-scope visibility, which may fire without fabricating a
       positive listener entry;
     - absent listener with a broader zero-count completed result whose port
-      range contains the otherwise-equal target scope, which may fire;
+      range contains the otherwise-equal target port, which may fire;
     - absent listener with partial visibility, which may not fire;
     - complete-for-scope listener visibility with no completed-result basis,
       which is invalid and may not fire;
@@ -1635,6 +1658,13 @@ The implementation agent MUST deliver:
       range that does not cover the target, each of which may not fire;
     - a broader completed result with a nonzero count that does not establish
       target-port absence, which may not fire;
+    - an exact-target-port `LISTENER_INVENTORY_RESULT` with count one and no
+      corresponding individual listener entry, which contradicts absence and
+      makes a persisted absence claim invalid;
+    - a valid zero-count target-port proof accompanied by a broader coherent
+      nonzero result, which remains valid when no other contradiction exists
+      because the broader aggregate does not locate a listener at the target
+      port;
     - a positive target `LISTENER_INVENTORY_ENTRY` contradicting the proposed
       absence, which may not fire and makes a persisted absence claim invalid;
     - two independent proxy upstream branches with no global primary;
@@ -1699,8 +1729,9 @@ Display wording may improve without changing these code meanings.
 For the listener-absence contract, a wrong result or assessment vantage uses
 `vantage.mismatch`; a wrong namespace, protocol, address family, bind
 semantics, or non-covering port range uses `visibility.scope_mismatch`; and a
-missing completed-result basis, nonzero result offered as absence proof, or
-contradictory positive target listener uses
+missing completed-result basis, nonzero result offered as absence proof,
+contradictory positive target listener, or coherent exact-target-port nonzero
+result uses
 `visibility.insufficient_for_absence`. The evaluator withholds the candidate
 under the same conditions that make a persisted candidate invalid.
 
@@ -1764,14 +1795,20 @@ Milestone 0 is complete only when:
   complete-for-scope assessment and its qualifying zero-count completed-result
   basis; a non-target listener entry is never treated as inventory-completion
   evidence;
+- the existing claim `port` value `P` is treated only for containment as
+  `[P, P]`; listener results and visibility retain ranges, and the claim wire
+  payload gains no `port_start` or `port_end` fields;
 - wrong-vantage evidence, wrong listener-scope dimensions, non-covering port
-  ranges, nonzero covering results, incomplete or self-authenticating
-  visibility, and contradictory positive target listeners fail to produce and
-  fail to validate prohibited absence findings;
+  ranges, nonzero results offered as absence proof, incomplete or
+  self-authenticating visibility, contradictory positive target listeners, and
+  coherent exact-target-port nonzero results fail to produce and fail to
+  validate prohibited absence findings, while a broader nonzero aggregate is
+  not treated as locating a target-port listener;
 - listener-existence completeness does not require process ownership when the
   scope does not request it or when the qualifying completed result has count
-  zero; requested ownership completeness for existing listeners remains
-  separately evidenced;
+  zero; requested ownership completeness for existing listeners counts
+  distinct concrete listener identities rather than observation IDs and
+  remains separately evidenced;
 - TLS verification failure retains sanitized transport/peer evidence and has a
   skipped HTTP execution;
 - no fixture contains raw Caddy JSON, credentials, headers, secrets, URL query
