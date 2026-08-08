@@ -27,6 +27,9 @@ func TestPersistedListenerAbsenceClaimUsesVisibilityContract(t *testing.T) {
 			r.Evidence.VisibilityAssessments[0].Scope.Listener.PortStart = 443
 			r.Evidence.VisibilityAssessments[0].Scope.Listener.PortEnd = 443
 		}},
+		{name: "zero basis", mutate: func(r *EvaluatedRun) {
+			r.Evidence.VisibilityAssessments[0].BasisObservationIDs = nil
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
