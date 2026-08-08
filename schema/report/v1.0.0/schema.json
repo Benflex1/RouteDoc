@@ -1,46 +1,3356 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "$id":"https://routedoc.invalid/schema/report/v1.0.0/schema.json",
-  "title":"RouteDoctor report 1.0.0",
-  "type":"object","additionalProperties":false,
-  "x-routedoc-member-order":["report_schema_version","producer","run_id","target","goal","requested_scope","policy","started_at","finished_at","vantage_points","capabilities","operator_assertions","entities","service_path","check_definitions","check_executions","observations","visibility_assessments","evaluation","claims","findings","limitations"],
-  "required":["report_schema_version","producer","run_id","target","goal","requested_scope","policy","started_at","finished_at","vantage_points","capabilities","operator_assertions","entities","service_path","check_definitions","check_executions","observations","visibility_assessments","evaluation","claims","findings","limitations"],
-  "properties":{
-    "report_schema_version":{"const":"1.0.0"},
-    "producer":{"$ref":"#/$defs/producer"},"run_id":{"$ref":"#/$defs/runID"},"target":{"$ref":"#/$defs/target"},"goal":{"$ref":"#/$defs/goal"},"requested_scope":{"$ref":"#/$defs/requestedScope"},"policy":{"$ref":"#/$defs/policy"},"started_at":{"$ref":"#/$defs/time"},"finished_at":{"$ref":"#/$defs/time"},
-    "vantage_points":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"vantage_id","items":{"$ref":"#/$defs/vantage"}},
-    "capabilities":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"capability_id","items":{"$ref":"#/$defs/capability"}},
-    "operator_assertions":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"assertion_id","items":{"$ref":"#/$defs/assertion"}},
-    "entities":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"entity_id","items":{"$ref":"#/$defs/entity"}},
-    "service_path":{"$ref":"#/$defs/servicePath"},
-    "check_definitions":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"check_id","items":{"$ref":"#/$defs/checkDefinition"}},
-    "check_executions":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"execution_id","items":{"$ref":"#/$defs/checkExecution"}},
-    "observations":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"observation_id","items":{"$ref":"#/$defs/observation"}},
-    "visibility_assessments":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"visibility_id","items":{"$ref":"#/$defs/visibility"}},
-    "evaluation":{"$ref":"#/$defs/evaluation"},"claims":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"claim_id","items":{"$ref":"#/$defs/claim"}},"findings":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"finding_id","items":{"$ref":"#/$defs/finding"}},"limitations":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"limitation_id","items":{"$ref":"#/$defs/limitation"}}
+  "$defs": {
+    "assertion": {
+      "additionalProperties": false,
+      "properties": {
+        "assertion_id": {
+          "$ref": "#/$defs/assertionID"
+        },
+        "established_at": {
+          "$ref": "#/$defs/time"
+        },
+        "kind": {
+          "enum": [
+            "LOCAL_ORIGIN_PARTICIPATION",
+            "EXPECTED_PATH_EDGE",
+            "HTTP_EXPECTATION",
+            "CONFIG_SOURCE_SELECTION",
+            "PRIVATE_REDIRECT_TRANSITION_ALLOWED"
+          ]
+        },
+        "parameters": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/localOrigin"
+            },
+            {
+              "$ref": "#/$defs/expectedEdge"
+            },
+            {
+              "$ref": "#/$defs/httpExpectation"
+            },
+            {
+              "$ref": "#/$defs/configSource"
+            },
+            {
+              "$ref": "#/$defs/privateRedirect"
+            }
+          ]
+        },
+        "source": {
+          "enum": [
+            "COMMAND_LINE",
+            "EXPLICIT_CONFIG",
+            "SYNTHETIC_FIXTURE"
+          ]
+        }
+      },
+      "required": [
+        "assertion_id",
+        "kind",
+        "parameters",
+        "established_at",
+        "source"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "assertion_id",
+        "kind",
+        "parameters",
+        "established_at",
+        "source"
+      ]
+    },
+    "assertionID": {
+      "pattern": "^assertion-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "assertionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/assertionID"
+        },
+        "kind": {
+          "const": "ASSERTION"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "id"
+      ]
+    },
+    "branch": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_id": {
+          "$ref": "#/$defs/branchID"
+        },
+        "goal": {
+          "enum": [
+            "HTTP_RESPONSE",
+            "HTTP_EXPECTATION",
+            "ORIGIN_PATH_DIAGNOSIS"
+          ]
+        },
+        "ordered_edge_ids": {
+          "items": {
+            "$ref": "#/$defs/edgeID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "ORDERED"
+        },
+        "parent_branch_id": {
+          "$ref": "#/$defs/branchID"
+        }
+      },
+      "required": [
+        "branch_id",
+        "ordered_edge_ids",
+        "goal"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "branch_id",
+        "parent_branch_id",
+        "ordered_edge_ids",
+        "goal"
+      ]
+    },
+    "branchID": {
+      "pattern": "^branch-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "capability": {
+      "additionalProperties": false,
+      "properties": {
+        "capability_id": {
+          "$ref": "#/$defs/capabilityID"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "pattern": "^(?:[a-z][a-z0-9_]*)?$",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "AVAILABLE",
+            "UNAVAILABLE",
+            "DENIED",
+            "UNKNOWN"
+          ]
+        }
+      },
+      "required": [
+        "capability_id",
+        "kind",
+        "state",
+        "reason_code"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "capability_id",
+        "kind",
+        "state",
+        "reason_code"
+      ]
+    },
+    "capabilityID": {
+      "pattern": "^capability-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "checkAssertionInputs": {
+      "additionalProperties": false,
+      "properties": {
+        "assertion_id": {
+          "$ref": "#/$defs/assertionID"
+        },
+        "kind": {
+          "const": "WITH_ASSERTION"
+        },
+        "subject_entity_id": {
+          "$ref": "#/$defs/entityID"
+        }
+      },
+      "required": [
+        "kind",
+        "subject_entity_id",
+        "assertion_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "subject_entity_id",
+        "assertion_id"
+      ]
+    },
+    "checkDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "$ref": "#/$defs/checkID"
+        },
+        "dependency_check_ids": {
+          "items": {
+            "$ref": "#/$defs/checkID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "check_id"
+        },
+        "execution_policy": {
+          "$ref": "#/$defs/executionPolicy"
+        },
+        "expected_condition": {
+          "$ref": "#/$defs/expectedCondition"
+        },
+        "inputs": {
+          "$ref": "#/$defs/checkInputs"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_capability_ids": {
+          "items": {
+            "$ref": "#/$defs/capabilityID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "capability_id"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "check_id",
+        "kind",
+        "version",
+        "inputs",
+        "dependency_check_ids",
+        "required_capability_ids",
+        "execution_policy",
+        "expected_condition"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "check_id",
+        "kind",
+        "version",
+        "inputs",
+        "dependency_check_ids",
+        "required_capability_ids",
+        "execution_policy",
+        "expected_condition"
+      ]
+    },
+    "checkExecution": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_id": {
+          "$ref": "#/$defs/branchID"
+        },
+        "check_id": {
+          "$ref": "#/$defs/checkID"
+        },
+        "execution_id": {
+          "$ref": "#/$defs/executionID"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/time"
+        },
+        "lifecycle": {
+          "enum": [
+            "NOT_RUN",
+            "COMPLETED",
+            "UNAVAILABLE",
+            "DENIED",
+            "TIMED_OUT",
+            "ERROR"
+          ]
+        },
+        "observation_ids": {
+          "items": {
+            "$ref": "#/$defs/observationID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "observation_id"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "pattern": "^(?:[a-z][a-z0-9_]*)?$",
+          "type": "string"
+        },
+        "started_at": {
+          "$ref": "#/$defs/time"
+        },
+        "vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        },
+        "verdict": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNKNOWN",
+            "SKIPPED"
+          ]
+        },
+        "visibility_assessment_ids": {
+          "items": {
+            "$ref": "#/$defs/visibilityID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "visibility_id"
+        }
+      },
+      "required": [
+        "execution_id",
+        "check_id",
+        "lifecycle",
+        "verdict",
+        "observation_ids",
+        "visibility_assessment_ids"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "execution_id",
+        "check_id",
+        "branch_id",
+        "vantage_id",
+        "started_at",
+        "finished_at",
+        "lifecycle",
+        "verdict",
+        "reason_code",
+        "observation_ids",
+        "visibility_assessment_ids"
+      ]
+    },
+    "checkID": {
+      "pattern": "^check-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "checkInputs": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/checkSubjectInputs"
+        },
+        {
+          "$ref": "#/$defs/checkNetworkInputs"
+        },
+        {
+          "$ref": "#/$defs/checkAssertionInputs"
+        }
+      ]
+    },
+    "checkNetworkInputs": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "NETWORK"
+        },
+        "subject_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        }
+      },
+      "required": [
+        "kind",
+        "subject_entity_id",
+        "vantage_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "subject_entity_id",
+        "vantage_id"
+      ]
+    },
+    "checkSubjectInputs": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "SUBJECT"
+        },
+        "subject_entity_id": {
+          "$ref": "#/$defs/entityID"
+        }
+      },
+      "required": [
+        "kind",
+        "subject_entity_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "subject_entity_id"
+      ]
+    },
+    "claim": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_ids": {
+          "items": {
+            "$ref": "#/$defs/branchID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "branch_id"
+        },
+        "claim_id": {
+          "$ref": "#/$defs/claimID"
+        },
+        "contradicting_evidence": {
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "kind,id"
+        },
+        "level": {
+          "enum": [
+            "OBSERVED",
+            "INFERRED",
+            "SUSPECTED"
+          ]
+        },
+        "parameters": {
+          "$ref": "#/$defs/claimParams"
+        },
+        "required_missing_evidence": {
+          "items": {
+            "$ref": "#/$defs/missing"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "kind"
+        },
+        "rule_id": {
+          "$ref": "#/$defs/ruleID"
+        },
+        "statement_code": {
+          "enum": [
+            "TLS_CERTIFICATE_HOSTNAME_MISMATCH",
+            "TCP_CONNECTION_REFUSED",
+            "NO_MATCHING_LISTENER_VISIBLE"
+          ]
+        },
+        "subject_entity_ids": {
+          "items": {
+            "$ref": "#/$defs/entityID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "entity_id"
+        },
+        "supporting_evidence": {
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "kind,id"
+        }
+      },
+      "required": [
+        "claim_id",
+        "statement_code",
+        "level",
+        "subject_entity_ids",
+        "branch_ids",
+        "parameters",
+        "supporting_evidence",
+        "contradicting_evidence",
+        "required_missing_evidence",
+        "rule_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "claim_id",
+        "statement_code",
+        "level",
+        "subject_entity_ids",
+        "branch_ids",
+        "parameters",
+        "supporting_evidence",
+        "contradicting_evidence",
+        "required_missing_evidence",
+        "rule_id"
+      ]
+    },
+    "claimID": {
+      "pattern": "^claim-[0-9]{6,}$",
+      "type": "string"
+    },
+    "claimListenerAbsent": {
+      "additionalProperties": false,
+      "properties": {
+        "address_family": {
+          "enum": [
+            "IPV4",
+            "IPV6"
+          ]
+        },
+        "bind_semantics": {
+          "enum": [
+            "EXACT",
+            "WILDCARD",
+            "LOOPBACK"
+          ]
+        },
+        "kind": {
+          "const": "NO_MATCHING_LISTENER_VISIBLE"
+        },
+        "namespace_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "port": {
+          "$ref": "#/$defs/u16"
+        },
+        "protocol": {
+          "enum": [
+            "TCP",
+            "UDP"
+          ]
+        },
+        "vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        }
+      },
+      "required": [
+        "kind",
+        "namespace_entity_id",
+        "vantage_id",
+        "protocol",
+        "address_family",
+        "bind_semantics",
+        "port"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "namespace_entity_id",
+        "vantage_id",
+        "protocol",
+        "address_family",
+        "bind_semantics",
+        "port"
+      ]
+    },
+    "claimParams": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/claimTLSHostnameMismatch"
+        },
+        {
+          "$ref": "#/$defs/claimTCPRefused"
+        },
+        {
+          "$ref": "#/$defs/claimListenerAbsent"
+        }
+      ]
+    },
+    "claimRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/claimID"
+        },
+        "kind": {
+          "const": "CLAIM"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "id"
+      ]
+    },
+    "claimTCPRefused": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "kind": {
+          "const": "TCP_CONNECTION_REFUSED"
+        },
+        "observed_at": {
+          "$ref": "#/$defs/time"
+        },
+        "vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        }
+      },
+      "required": [
+        "kind",
+        "endpoint_entity_id",
+        "vantage_id",
+        "observed_at"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "endpoint_entity_id",
+        "vantage_id",
+        "observed_at"
+      ]
+    },
+    "claimTLSHostnameMismatch": {
+      "additionalProperties": false,
+      "properties": {
+        "hostname": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "TLS_CERTIFICATE_HOSTNAME_MISMATCH"
+        },
+        "peer_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "trust_source": {
+          "enum": [
+            "SYSTEM",
+            "EXPLICIT",
+            "UNKNOWN"
+          ]
+        },
+        "verification_time": {
+          "$ref": "#/$defs/time"
+        }
+      },
+      "required": [
+        "kind",
+        "peer_entity_id",
+        "hostname",
+        "verification_time",
+        "trust_source"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "peer_entity_id",
+        "hostname",
+        "verification_time",
+        "trust_source"
+      ]
+    },
+    "clientIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "CLIENT_NETWORK"
+        },
+        "label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "label"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "label"
+      ]
+    },
+    "configSource": {
+      "additionalProperties": false,
+      "properties": {
+        "component_kind": {
+          "enum": [
+            "CADDY",
+            "DOCKER"
+          ]
+        },
+        "kind": {
+          "const": "CONFIG_SOURCE_SELECTION"
+        },
+        "source_kind": {
+          "enum": [
+            "ACTIVE_API",
+            "EXPLICIT_FILE",
+            "ENGINE_ENDPOINT"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "component_kind",
+        "source_kind"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "component_kind",
+        "source_kind"
+      ]
+    },
+    "containerIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "container_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "type": "string"
+        },
+        "daemon_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "CONTAINER_NAMESPACE"
+        }
+      },
+      "required": [
+        "kind",
+        "daemon_id",
+        "container_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "daemon_id",
+        "container_id"
+      ]
+    },
+    "edge": {
+      "additionalProperties": false,
+      "properties": {
+        "edge_id": {
+          "$ref": "#/$defs/edgeID"
+        },
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "kind,id"
+        },
+        "from": {
+          "$ref": "#/$defs/entityID"
+        },
+        "provenance": {
+          "enum": [
+            "OPERATOR_ASSERTED",
+            "DIRECTLY_OBSERVED",
+            "ACTIVE_RUNTIME_CONFIG",
+            "CONFIGURED_INTENT"
+          ]
+        },
+        "relation": {
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/$defs/entityID"
+        }
+      },
+      "required": [
+        "edge_id",
+        "from",
+        "to",
+        "relation",
+        "provenance",
+        "evidence_refs"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "edge_id",
+        "from",
+        "to",
+        "relation",
+        "provenance",
+        "evidence_refs"
+      ]
+    },
+    "edgeID": {
+      "pattern": "^edge-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "endpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "port": {
+          "$ref": "#/$defs/u16"
+        },
+        "transport": {
+          "enum": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      },
+      "required": [
+        "address",
+        "port",
+        "transport"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "address",
+        "port",
+        "transport"
+      ]
+    },
+    "entity": {
+      "additionalProperties": false,
+      "properties": {
+        "display_label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "identity": {
+          "$ref": "#/$defs/entityIdentity"
+        },
+        "kind": {
+          "enum": [
+            "URL_TARGET",
+            "HOSTNAME",
+            "IP_ADDRESS",
+            "SOCKET_ENDPOINT",
+            "TLS_PEER",
+            "HTTP_EXCHANGE",
+            "PROXY_INSTANCE",
+            "PROXY_ROUTE",
+            "UPSTREAM_ENDPOINT",
+            "LISTENER",
+            "PROCESS",
+            "CONTAINER",
+            "NETWORK_NAMESPACE"
+          ]
+        }
+      },
+      "required": [
+        "entity_id",
+        "kind",
+        "display_label",
+        "identity"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "entity_id",
+        "kind",
+        "display_label",
+        "identity"
+      ]
+    },
+    "entityContainerIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "container_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "CONTAINER"
+        },
+        "runtime_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "runtime_id",
+        "container_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "runtime_id",
+        "container_id"
+      ]
+    },
+    "entityHTTPExchangeIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "HTTP_EXCHANGE"
+        },
+        "ordinal": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "ordinal"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "ordinal"
+      ]
+    },
+    "entityHostnameIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "hostname": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "HOSTNAME"
+        }
+      },
+      "required": [
+        "kind",
+        "hostname"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "hostname"
+      ]
+    },
+    "entityID": {
+      "pattern": "^entity-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "entityIPAddressIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "IP_ADDRESS"
+        }
+      },
+      "required": [
+        "kind",
+        "address"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "address"
+      ]
+    },
+    "entityIdentity": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/entityURLTargetIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityHostnameIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityIPAddressIdentity"
+        },
+        {
+          "$ref": "#/$defs/entitySocketEndpointIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityTLSPeerIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityHTTPExchangeIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityProxyInstanceIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityProxyRouteIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityUpstreamEndpointIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityListenerIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityProcessIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityContainerIdentity"
+        },
+        {
+          "$ref": "#/$defs/entityNamespaceIdentity"
+        }
+      ]
+    },
+    "entityListenerIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/endpoint"
+        },
+        "kind": {
+          "const": "LISTENER"
+        }
+      },
+      "required": [
+        "kind",
+        "endpoint"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "endpoint"
+      ]
+    },
+    "entityNamespaceIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "NETWORK_NAMESPACE"
+        },
+        "namespace_inode": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "namespace_inode"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "namespace_inode"
+      ]
+    },
+    "entityProcessIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "PROCESS"
+        },
+        "pid": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "pid"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "pid"
+      ]
+    },
+    "entityProxyInstanceIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "PROXY_INSTANCE"
+        },
+        "synthetic_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "synthetic_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "synthetic_id"
+      ]
+    },
+    "entityProxyRouteIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "PROXY_ROUTE"
+        },
+        "synthetic_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "synthetic_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "synthetic_id"
+      ]
+    },
+    "entitySocketEndpointIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/endpoint"
+        },
+        "kind": {
+          "const": "SOCKET_ENDPOINT"
+        }
+      },
+      "required": [
+        "kind",
+        "endpoint"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "endpoint"
+      ]
+    },
+    "entityTLSPeerIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "TLS_PEER"
+        }
+      },
+      "required": [
+        "kind",
+        "fingerprint"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "fingerprint"
+      ]
+    },
+    "entityURLTargetIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "URL_TARGET"
+        },
+        "marker": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "marker"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "marker"
+      ]
+    },
+    "entityUpstreamEndpointIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/endpoint"
+        },
+        "kind": {
+          "const": "UPSTREAM_ENDPOINT"
+        }
+      },
+      "required": [
+        "kind",
+        "endpoint"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "endpoint"
+      ]
+    },
+    "evaluation": {
+      "additionalProperties": false,
+      "properties": {
+        "evaluated_at": {
+          "$ref": "#/$defs/time"
+        },
+        "ordered_rule_ids": {
+          "items": {
+            "$ref": "#/$defs/ruleID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "ORDERED"
+        }
+      },
+      "required": [
+        "evaluated_at",
+        "ordered_rule_ids"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "evaluated_at",
+        "ordered_rule_ids"
+      ]
+    },
+    "evidenceRef": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/observationRef"
+        },
+        {
+          "$ref": "#/$defs/claimRef"
+        },
+        {
+          "$ref": "#/$defs/visibilityRef"
+        },
+        {
+          "$ref": "#/$defs/assertionRef"
+        }
+      ]
+    },
+    "executionID": {
+      "pattern": "^execution-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "executionPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "deadline_is_expected_condition": {
+          "type": "boolean"
+        },
+        "deadline_ns": {
+          "type": "integer"
+        },
+        "dependency_failure_reason_code": {
+          "maxLength": 64,
+          "pattern": "^(?:[a-z][a-z0-9_]*)?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "deadline_ns",
+        "dependency_failure_reason_code",
+        "deadline_is_expected_condition"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "deadline_ns",
+        "dependency_failure_reason_code",
+        "deadline_is_expected_condition"
+      ]
+    },
+    "expectedCapabilityState": {
+      "additionalProperties": false,
+      "properties": {
+        "capability_state": {
+          "enum": [
+            "AVAILABLE",
+            "UNAVAILABLE",
+            "DENIED",
+            "UNKNOWN"
+          ]
+        },
+        "kind": {
+          "const": "CAPABILITY_STATE"
+        }
+      },
+      "required": [
+        "kind",
+        "capability_state"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "capability_state"
+      ]
+    },
+    "expectedCondition": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/expectedResult"
+        },
+        {
+          "$ref": "#/$defs/expectedFamily"
+        },
+        {
+          "$ref": "#/$defs/expectedPort"
+        },
+        {
+          "$ref": "#/$defs/expectedHostname"
+        },
+        {
+          "$ref": "#/$defs/expectedStatusRange"
+        },
+        {
+          "$ref": "#/$defs/expectedMatcherResult"
+        },
+        {
+          "$ref": "#/$defs/expectedCapabilityState"
+        }
+      ]
+    },
+    "expectedEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "from_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "kind": {
+          "const": "EXPECTED_PATH_EDGE"
+        },
+        "relation": {
+          "enum": [
+            "RESOLVES_TO",
+            "CONNECTS_TO",
+            "NEGOTIATES_TLS_WITH",
+            "VERIFIES",
+            "REQUESTS_HTTP_FROM",
+            "REDIRECTS_TO",
+            "ROUTES_TO",
+            "SELECTS_UPSTREAM",
+            "LISTENS_ON",
+            "OWNED_BY",
+            "ASSOCIATED_WITH"
+          ]
+        },
+        "to_entity_id": {
+          "$ref": "#/$defs/entityID"
+        }
+      },
+      "required": [
+        "kind",
+        "from_entity_id",
+        "to_entity_id",
+        "relation"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "from_entity_id",
+        "to_entity_id",
+        "relation"
+      ]
+    },
+    "expectedFamily": {
+      "additionalProperties": false,
+      "properties": {
+        "address_family": {
+          "enum": [
+            "IPV4",
+            "IPV6"
+          ]
+        },
+        "kind": {
+          "const": "FAMILY"
+        }
+      },
+      "required": [
+        "kind",
+        "address_family"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "address_family"
+      ]
+    },
+    "expectedHostname": {
+      "additionalProperties": false,
+      "properties": {
+        "hostname": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "HOSTNAME"
+        }
+      },
+      "required": [
+        "kind",
+        "hostname"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "hostname"
+      ]
+    },
+    "expectedMatcherResult": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "MATCHER_RESULT"
+        },
+        "matcher_result": {
+          "enum": [
+            "MATCHED",
+            "NOT_MATCHED",
+            "UNKNOWN"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "matcher_result"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "matcher_result"
+      ]
+    },
+    "expectedPort": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "PORT"
+        },
+        "port": {
+          "$ref": "#/$defs/u16"
+        }
+      },
+      "required": [
+        "kind",
+        "port"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "port"
+      ]
+    },
+    "expectedResult": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "RESULT"
+        },
+        "result": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:+/-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "result"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "result"
+      ]
+    },
+    "expectedStatusRange": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "STATUS_RANGE"
+        },
+        "status_max": {
+          "$ref": "#/$defs/u16"
+        },
+        "status_min": {
+          "$ref": "#/$defs/u16"
+        }
+      },
+      "required": [
+        "kind",
+        "status_min",
+        "status_max"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "status_min",
+        "status_max"
+      ]
+    },
+    "finding": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_ids": {
+          "items": {
+            "$ref": "#/$defs/branchID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "branch_id"
+        },
+        "claim_ids": {
+          "items": {
+            "$ref": "#/$defs/claimID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "claim_id"
+        },
+        "finding_id": {
+          "$ref": "#/$defs/findingID"
+        },
+        "kind": {
+          "enum": [
+            "BLOCKER",
+            "EXPECTATION_FAILURE",
+            "PARTIAL_REACHABILITY",
+            "ADVISORY",
+            "LIMITATION"
+          ]
+        },
+        "level": {
+          "enum": [
+            "OBSERVED",
+            "INFERRED",
+            "SUSPECTED"
+          ]
+        },
+        "limitations": {
+          "items": {
+            "$ref": "#/$defs/limitation"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "limitation_id"
+        },
+        "path_positions": {
+          "items": {
+            "$ref": "#/$defs/pathPosition"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "branch_id"
+        },
+        "rule_id": {
+          "$ref": "#/$defs/ruleID"
+        },
+        "selection": {
+          "enum": [
+            "GLOBAL_PRIMARY",
+            "BRANCH_PRIMARY",
+            "ADDITIONAL",
+            "NONE"
+          ]
+        },
+        "suggested_experiments": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "ORDERED"
+        },
+        "title_code": {
+          "enum": [
+            "TLS_CERTIFICATE_HOSTNAME_MISMATCH",
+            "TCP_CONNECTION_REFUSED",
+            "NO_MATCHING_LISTENER_VISIBLE"
+          ]
+        }
+      },
+      "required": [
+        "finding_id",
+        "kind",
+        "title_code",
+        "level",
+        "branch_ids",
+        "path_positions",
+        "claim_ids",
+        "rule_id",
+        "limitations",
+        "suggested_experiments",
+        "selection"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "finding_id",
+        "kind",
+        "title_code",
+        "level",
+        "branch_ids",
+        "path_positions",
+        "claim_ids",
+        "rule_id",
+        "limitations",
+        "suggested_experiments",
+        "selection"
+      ]
+    },
+    "findingID": {
+      "pattern": "^finding-[0-9]{6,}$",
+      "type": "string"
+    },
+    "goal": {
+      "additionalProperties": false,
+      "properties": {
+        "expectation_assertion_id": {
+          "$ref": "#/$defs/assertionID"
+        },
+        "kind": {
+          "enum": [
+            "HTTP_RESPONSE",
+            "HTTP_EXPECTATION",
+            "ORIGIN_PATH_DIAGNOSIS"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "expectation_assertion_id"
+      ]
+    },
+    "hostIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "HOST_NAMESPACE"
+        },
+        "namespace_inode": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "namespace_inode"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "namespace_inode"
+      ]
+    },
+    "httpExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "expectation_kind": {
+          "enum": [
+            "STATUS_RANGE",
+            "HEADER_PRESENT"
+          ]
+        },
+        "header_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9!#$%\u0026'*+.^_`|~-]+$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "HTTP_EXPECTATION"
+        },
+        "status_max": {
+          "$ref": "#/$defs/u16"
+        },
+        "status_min": {
+          "$ref": "#/$defs/u16"
+        }
+      },
+      "required": [
+        "kind",
+        "expectation_kind"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "expectation_kind",
+        "status_min",
+        "status_max",
+        "header_name"
+      ]
+    },
+    "id": {
+      "minLength": 1,
+      "pattern": "^[A-Za-z][A-Za-z0-9_.:/-]*$",
+      "type": "string"
+    },
+    "identity": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/clientIdentity"
+        },
+        {
+          "$ref": "#/$defs/hostIdentity"
+        },
+        {
+          "$ref": "#/$defs/containerIdentity"
+        },
+        {
+          "$ref": "#/$defs/unknownIdentity"
+        }
+      ]
+    },
+    "limitation": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "insufficient_privilege",
+            "tls_peer_unverified",
+            "unsupported_capability",
+            "unknown_vantage",
+            "partial_visibility",
+            "skipped_dependency",
+            "generic"
+          ]
+        },
+        "limitation_id": {
+          "$ref": "#/$defs/limitationID"
+        },
+        "scope": {
+          "$ref": "#/$defs/limitationScope"
+        }
+      },
+      "required": [
+        "limitation_id",
+        "code",
+        "scope"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "limitation_id",
+        "code",
+        "scope"
+      ]
+    },
+    "limitationFindingScope": {
+      "additionalProperties": false,
+      "properties": {
+        "finding_id": {
+          "$ref": "#/$defs/findingID"
+        },
+        "kind": {
+          "const": "FINDING"
+        }
+      },
+      "required": [
+        "kind",
+        "finding_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "finding_id"
+      ]
+    },
+    "limitationID": {
+      "pattern": "^limitation-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "limitationObservationScope": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "OBSERVATION"
+        },
+        "observation_id": {
+          "$ref": "#/$defs/observationID"
+        }
+      },
+      "required": [
+        "kind",
+        "observation_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "observation_id"
+      ]
+    },
+    "limitationRunScope": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "RUN"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind"
+      ]
+    },
+    "limitationScope": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/limitationRunScope"
+        },
+        {
+          "$ref": "#/$defs/limitationVantageScope"
+        },
+        {
+          "$ref": "#/$defs/limitationObservationScope"
+        },
+        {
+          "$ref": "#/$defs/limitationVisibilityScope"
+        },
+        {
+          "$ref": "#/$defs/limitationFindingScope"
+        }
+      ]
+    },
+    "limitationVantageScope": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "VANTAGE"
+        },
+        "vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        }
+      },
+      "required": [
+        "kind",
+        "vantage_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "vantage_id"
+      ]
+    },
+    "limitationVisibilityScope": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "VISIBILITY"
+        },
+        "visibility_id": {
+          "$ref": "#/$defs/visibilityID"
+        }
+      },
+      "required": [
+        "kind",
+        "visibility_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "visibility_id"
+      ]
+    },
+    "localOrigin": {
+      "additionalProperties": false,
+      "properties": {
+        "host_vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        },
+        "kind": {
+          "const": "LOCAL_ORIGIN_PARTICIPATION"
+        },
+        "url_target_entity_id": {
+          "$ref": "#/$defs/entityID"
+        }
+      },
+      "required": [
+        "kind",
+        "url_target_entity_id",
+        "host_vantage_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "url_target_entity_id",
+        "host_vantage_id"
+      ]
+    },
+    "missing": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/missingObservation"
+        },
+        {
+          "$ref": "#/$defs/missingVisibility"
+        },
+        {
+          "$ref": "#/$defs/missingVantage"
+        }
+      ]
+    },
+    "missingObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "OBSERVATION_REQUIRED"
+        },
+        "observation_kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "observation_kind"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "observation_kind"
+      ]
+    },
+    "missingVantage": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "VANTAGE_REQUIRED"
+        },
+        "vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        }
+      },
+      "required": [
+        "kind",
+        "vantage_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "vantage_id"
+      ]
+    },
+    "missingVisibility": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "VISIBILITY_REQUIRED"
+        },
+        "visibility_scope": {
+          "$ref": "#/$defs/visibilityScope"
+        },
+        "visibility_subject_kind": {
+          "const": "LISTENER"
+        }
+      },
+      "required": [
+        "kind",
+        "visibility_subject_kind",
+        "visibility_scope"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "visibility_subject_kind",
+        "visibility_scope"
+      ]
+    },
+    "node": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "$ref": "#/$defs/entityID"
+        }
+      },
+      "required": [
+        "entity_id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "entity_id"
+      ]
+    },
+    "nonNegative": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "observation": {
+      "additionalProperties": false,
+      "properties": {
+        "acquisition_method": {
+          "enum": [
+            "DIRECT_PROBE",
+            "ACTIVE_RUNTIME_API",
+            "CONFIGURED_INTENT_SOURCE",
+            "SYSTEM_INSPECTION",
+            "SYNTHETIC_FIXTURE"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "limitations": {
+          "items": {
+            "$ref": "#/$defs/limitation"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "limitation_id"
+        },
+        "observation_id": {
+          "$ref": "#/$defs/observationID"
+        },
+        "observed_at": {
+          "$ref": "#/$defs/time"
+        },
+        "payload": {
+          "$ref": "#/$defs/observationPayload"
+        },
+        "sensitivity": {
+          "enum": [
+            "PUBLIC",
+            "SANITIZED_DERIVED"
+          ]
+        },
+        "source_component": {
+          "type": "string"
+        },
+        "subject_entity_ids": {
+          "items": {
+            "$ref": "#/$defs/entityID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "entity_id"
+        },
+        "vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        }
+      },
+      "required": [
+        "observation_id",
+        "kind",
+        "subject_entity_ids",
+        "observed_at",
+        "payload",
+        "acquisition_method",
+        "source_component",
+        "sensitivity",
+        "limitations"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "observation_id",
+        "kind",
+        "subject_entity_ids",
+        "vantage_id",
+        "observed_at",
+        "payload",
+        "acquisition_method",
+        "source_component",
+        "sensitivity",
+        "limitations"
+      ]
+    },
+    "observationID": {
+      "pattern": "^observation-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "observationPayload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/payloadSystemResolution"
+        },
+        {
+          "$ref": "#/$defs/payloadTCPConnection"
+        },
+        {
+          "$ref": "#/$defs/payloadTLSTransport"
+        },
+        {
+          "$ref": "#/$defs/payloadTLSPeer"
+        },
+        {
+          "$ref": "#/$defs/payloadCertificateVerification"
+        },
+        {
+          "$ref": "#/$defs/payloadHTTP"
+        },
+        {
+          "$ref": "#/$defs/payloadActiveProxyRoute"
+        },
+        {
+          "$ref": "#/$defs/payloadConfiguredProxyRoute"
+        },
+        {
+          "$ref": "#/$defs/payloadUpstreamSelection"
+        },
+        {
+          "$ref": "#/$defs/payloadListenerInventory"
+        },
+        {
+          "$ref": "#/$defs/payloadProcessOwnership"
+        },
+        {
+          "$ref": "#/$defs/payloadDockerRuntime"
+        },
+        {
+          "$ref": "#/$defs/payloadCapabilityPermission"
+        }
+      ]
+    },
+    "observationRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/observationID"
+        },
+        "kind": {
+          "const": "OBSERVATION"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "id"
+      ]
+    },
+    "pathPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_id": {
+          "$ref": "#/$defs/branchID"
+        },
+        "position": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "branch_id",
+        "position"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "branch_id",
+        "position"
+      ]
+    },
+    "pathSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "is_root": {
+          "type": "boolean"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "query_present": {
+          "type": "boolean"
+        },
+        "segment_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "trailing_slash": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "present",
+        "is_root",
+        "segment_count",
+        "trailing_slash",
+        "query_present"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "present",
+        "is_root",
+        "segment_count",
+        "trailing_slash",
+        "query_present"
+      ]
+    },
+    "payloadActiveProxyRoute": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "ACTIVE_PROXY_ROUTE_SUMMARY"
+        },
+        "match_result": {
+          "enum": [
+            "MATCHED",
+            "NOT_MATCHED",
+            "UNKNOWN"
+          ]
+        },
+        "matcher_kind": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:+/-]*$",
+          "type": "string"
+        },
+        "proxy_route_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "upstream_entity_id": {
+          "$ref": "#/$defs/entityID"
+        }
+      },
+      "required": [
+        "kind",
+        "proxy_route_entity_id",
+        "matcher_kind",
+        "match_result"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "proxy_route_entity_id",
+        "upstream_entity_id",
+        "matcher_kind",
+        "match_result"
+      ]
+    },
+    "payloadCapabilityPermission": {
+      "additionalProperties": false,
+      "properties": {
+        "capability_id": {
+          "$ref": "#/$defs/capabilityID"
+        },
+        "kind": {
+          "const": "CAPABILITY_PERMISSION_RESULT"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "pattern": "^(?:[a-z][a-z0-9_]*)?$",
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "capability_id",
+        "result",
+        "reason_code"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "result",
+        "capability_id",
+        "reason_code"
+      ]
+    },
+    "payloadCertificateVerification": {
+      "additionalProperties": false,
+      "properties": {
+        "failure_reason": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "CERTIFICATE_VERIFICATION_RESULT"
+        },
+        "peer_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "result": {
+          "type": "string"
+        },
+        "trust_source": {
+          "enum": [
+            "SYSTEM",
+            "EXPLICIT",
+            "UNKNOWN"
+          ]
+        },
+        "verification_time": {
+          "$ref": "#/$defs/time"
+        },
+        "verified_hostname": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "peer_entity_id",
+        "verified_hostname",
+        "verification_time",
+        "trust_source",
+        "result"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "result",
+        "peer_entity_id",
+        "verified_hostname",
+        "verification_time",
+        "trust_source",
+        "failure_reason"
+      ]
+    },
+    "payloadConfiguredProxyRoute": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "CONFIGURED_PROXY_ROUTE_SUMMARY"
+        },
+        "match_result": {
+          "enum": [
+            "MATCHED",
+            "NOT_MATCHED",
+            "UNKNOWN"
+          ]
+        },
+        "matcher_kind": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:+/-]*$",
+          "type": "string"
+        },
+        "proxy_route_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "upstream_entity_id": {
+          "$ref": "#/$defs/entityID"
+        }
+      },
+      "required": [
+        "kind",
+        "proxy_route_entity_id",
+        "matcher_kind",
+        "match_result"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "proxy_route_entity_id",
+        "upstream_entity_id",
+        "matcher_kind",
+        "match_result"
+      ]
+    },
+    "payloadDockerRuntime": {
+      "additionalProperties": false,
+      "properties": {
+        "container_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "endpoint_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "fact_kind": {
+          "enum": [
+            "CONTAINER_STATE",
+            "NETWORK_MEMBERSHIP",
+            "PUBLISHED_PORT"
+          ]
+        },
+        "kind": {
+          "const": "DOCKER_RUNTIME_SUMMARY"
+        },
+        "namespace_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "runtime_state": {
+          "enum": [
+            "RUNNING",
+            "STOPPED",
+            "UNKNOWN"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "fact_kind",
+        "container_entity_id",
+        "runtime_state"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "endpoint_entity_id",
+        "namespace_entity_id",
+        "fact_kind",
+        "container_entity_id",
+        "runtime_state"
+      ]
+    },
+    "payloadHTTP": {
+      "additionalProperties": false,
+      "properties": {
+        "exchange_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "kind": {
+          "const": "HTTP_RESULT"
+        },
+        "redirect_target": {
+          "$ref": "#/$defs/target"
+        },
+        "redirect_target_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "result_kind": {
+          "enum": [
+            "RESPONSE",
+            "REDIRECT"
+          ]
+        },
+        "status_code": {
+          "$ref": "#/$defs/u16"
+        }
+      },
+      "required": [
+        "kind",
+        "exchange_entity_id",
+        "result_kind",
+        "status_code"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "exchange_entity_id",
+        "result_kind",
+        "status_code",
+        "redirect_target_entity_id",
+        "redirect_target"
+      ]
+    },
+    "payloadListenerInventory": {
+      "additionalProperties": false,
+      "properties": {
+        "address_family": {
+          "enum": [
+            "IPV4",
+            "IPV6"
+          ]
+        },
+        "bind_semantics": {
+          "enum": [
+            "EXACT",
+            "WILDCARD",
+            "LOOPBACK"
+          ]
+        },
+        "kind": {
+          "const": "LISTENER_INVENTORY_ENTRY"
+        },
+        "listener_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "namespace_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "port": {
+          "$ref": "#/$defs/u16"
+        },
+        "protocol": {
+          "enum": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "listener_entity_id",
+        "namespace_entity_id",
+        "protocol",
+        "address_family",
+        "bind_semantics",
+        "port"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "address_family",
+        "listener_entity_id",
+        "namespace_entity_id",
+        "protocol",
+        "bind_semantics",
+        "port"
+      ]
+    },
+    "payloadProcessOwnership": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "PROCESS_OWNERSHIP_ENTRY"
+        },
+        "listener_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "process_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "listener_entity_id",
+        "result"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "result",
+        "listener_entity_id",
+        "process_entity_id"
+      ]
+    },
+    "payloadSystemResolution": {
+      "additionalProperties": false,
+      "properties": {
+        "address_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "address_family": {
+          "enum": [
+            "IPV4",
+            "IPV6"
+          ]
+        },
+        "hostname_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "kind": {
+          "const": "SYSTEM_RESOLUTION_RESULT"
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "hostname_entity_id",
+        "address_family",
+        "result"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "hostname_entity_id",
+        "address_entity_id",
+        "address_family",
+        "result"
+      ]
+    },
+    "payloadTCPConnection": {
+      "additionalProperties": false,
+      "properties": {
+        "deadline_part_of_expected_condition": {
+          "type": "boolean"
+        },
+        "duration_ns": {
+          "type": "integer"
+        },
+        "endpoint_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "kind": {
+          "const": "TCP_CONNECTION_RESULT"
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "endpoint_entity_id",
+        "result",
+        "duration_ns",
+        "deadline_part_of_expected_condition"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "result",
+        "endpoint_entity_id",
+        "duration_ns",
+        "deadline_part_of_expected_condition"
+      ]
+    },
+    "payloadTLSPeer": {
+      "additionalProperties": false,
+      "properties": {
+        "certificate_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "TLS_PEER_SUMMARY"
+        },
+        "leaf_sha256": {
+          "type": "string"
+        },
+        "not_after": {
+          "$ref": "#/$defs/time"
+        },
+        "not_before": {
+          "$ref": "#/$defs/time"
+        },
+        "peer_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "san_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "san_type": {
+          "enum": [
+            "DNS",
+            "IP",
+            "OTHER"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "peer_entity_id",
+        "certificate_count",
+        "leaf_sha256",
+        "not_before",
+        "not_after",
+        "san_type",
+        "san_count"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "peer_entity_id",
+        "certificate_count",
+        "leaf_sha256",
+        "not_before",
+        "not_after",
+        "san_type",
+        "san_count"
+      ]
+    },
+    "payloadTLSTransport": {
+      "additionalProperties": false,
+      "properties": {
+        "alert_code": {
+          "$ref": "#/$defs/u16"
+        },
+        "cipher_suite": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:+/-]*$",
+          "type": "string"
+        },
+        "duration_ns": {
+          "type": "integer"
+        },
+        "kind": {
+          "const": "TLS_TRANSPORT_RESULT"
+        },
+        "negotiated_alpn": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:+/-]*$",
+          "type": "string"
+        },
+        "peer_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "protocol_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:+/-]*$",
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "sni_sent": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "peer_entity_id",
+        "result",
+        "duration_ns"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "result",
+        "duration_ns",
+        "peer_entity_id",
+        "protocol_version",
+        "cipher_suite",
+        "negotiated_alpn",
+        "sni_sent",
+        "alert_code"
+      ]
+    },
+    "payloadUpstreamSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "UPSTREAM_SELECTION_SUMMARY"
+        },
+        "proxy_route_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "result": {
+          "type": "string"
+        },
+        "upstream_entity_id": {
+          "$ref": "#/$defs/entityID"
+        }
+      },
+      "required": [
+        "kind",
+        "proxy_route_entity_id",
+        "result"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "result",
+        "proxy_route_entity_id",
+        "upstream_entity_id"
+      ]
+    },
+    "policy": {
+      "additionalProperties": false,
+      "properties": {
+        "coherence_window_ns": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "coherence_window_ns"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "coherence_window_ns"
+      ]
+    },
+    "privateRedirect": {
+      "additionalProperties": false,
+      "properties": {
+        "from_address_scope": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:+/-]*$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "PRIVATE_REDIRECT_TRANSITION_ALLOWED"
+        },
+        "to_address_scope": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:+/-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "from_address_scope",
+        "to_address_scope"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "from_address_scope",
+        "to_address_scope"
+      ]
+    },
+    "producer": {
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "build"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "name",
+        "version",
+        "build"
+      ]
+    },
+    "requestedScope": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "CLIENT_ONLY",
+            "LOCAL_ORIGIN"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind"
+      ]
+    },
+    "ruleID": {
+      "pattern": "^[a-z][a-z0-9_.-]*\\.[a-z][a-z0-9_.-]*/v[1-9][0-9]*$",
+      "type": "string"
+    },
+    "runID": {
+      "pattern": "^run-[0-9]{6,}$",
+      "type": "string"
+    },
+    "servicePath": {
+      "additionalProperties": false,
+      "properties": {
+        "branches": {
+          "items": {
+            "$ref": "#/$defs/branch"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "parent_then_branch_id"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/edge"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "edge_id"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/node"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "entity_id"
+        }
+      },
+      "required": [
+        "nodes",
+        "edges",
+        "branches"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "nodes",
+        "edges",
+        "branches"
+      ]
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "effective_port": {
+          "$ref": "#/$defs/u16"
+        },
+        "hostname": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$",
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/pathSummary"
+        },
+        "scheme": {
+          "enum": [
+            "http",
+            "https"
+          ]
+        }
+      },
+      "required": [
+        "scheme",
+        "hostname",
+        "effective_port",
+        "path"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "scheme",
+        "hostname",
+        "effective_port",
+        "path"
+      ]
+    },
+    "time": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "u16": {
+      "maximum": 65535,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "unknownIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "UNKNOWN_NAMESPACE"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "pattern": "^(?:[a-z][a-z0-9_]*)?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "reason_code"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "reason_code"
+      ]
+    },
+    "vantage": {
+      "additionalProperties": false,
+      "properties": {
+        "display_label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "establishment": {
+          "enum": [
+            "DIRECTLY_OBSERVED",
+            "OPERATOR_SUPPLIED",
+            "RUNTIME_CORRELATED",
+            "UNKNOWN"
+          ]
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "kind": {
+          "enum": [
+            "CLIENT_NETWORK",
+            "HOST_NAMESPACE",
+            "CONTAINER_NAMESPACE",
+            "UNKNOWN_NAMESPACE"
+          ]
+        },
+        "limitations": {
+          "items": {
+            "$ref": "#/$defs/limitation"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "limitation_id"
+        },
+        "parent_vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        },
+        "role": {
+          "enum": [
+            "CLIENT",
+            "ORIGIN_HOST",
+            "PROXY",
+            "UPSTREAM",
+            "UNSPECIFIED"
+          ]
+        },
+        "vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        }
+      },
+      "required": [
+        "vantage_id",
+        "kind",
+        "role",
+        "display_label",
+        "identity",
+        "establishment",
+        "limitations"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "vantage_id",
+        "kind",
+        "role",
+        "display_label",
+        "identity",
+        "parent_vantage_id",
+        "establishment",
+        "limitations"
+      ]
+    },
+    "vantageID": {
+      "pattern": "^vantage-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "visibility": {
+      "additionalProperties": false,
+      "properties": {
+        "assessed_at": {
+          "$ref": "#/$defs/time"
+        },
+        "basis_observation_ids": {
+          "items": {
+            "$ref": "#/$defs/observationID"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "observation_id"
+        },
+        "level": {
+          "enum": [
+            "COMPLETE_FOR_SCOPE",
+            "PARTIAL",
+            "UNKNOWN",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "limitations": {
+          "items": {
+            "$ref": "#/$defs/limitation"
+          },
+          "type": "array",
+          "x-routedoc-array-kind": "SET",
+          "x-routedoc-sort-key": "limitation_id"
+        },
+        "scope": {
+          "$ref": "#/$defs/visibilityScope"
+        },
+        "subject_kind": {
+          "const": "LISTENER"
+        },
+        "vantage_id": {
+          "$ref": "#/$defs/vantageID"
+        },
+        "visibility_id": {
+          "$ref": "#/$defs/visibilityID"
+        }
+      },
+      "required": [
+        "visibility_id",
+        "subject_kind",
+        "vantage_id",
+        "scope",
+        "level",
+        "basis_observation_ids",
+        "limitations",
+        "assessed_at"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "visibility_id",
+        "subject_kind",
+        "vantage_id",
+        "scope",
+        "level",
+        "basis_observation_ids",
+        "limitations",
+        "assessed_at"
+      ]
+    },
+    "visibilityID": {
+      "pattern": "^visibility-[A-Za-z0-9_.:/-]+$",
+      "type": "string"
+    },
+    "visibilityRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/visibilityID"
+        },
+        "kind": {
+          "const": "VISIBILITY"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "id"
+      ]
+    },
+    "visibilityScope": {
+      "additionalProperties": false,
+      "properties": {
+        "address_family": {
+          "enum": [
+            "IPV4",
+            "IPV6"
+          ]
+        },
+        "bind_semantics": {
+          "enum": [
+            "EXACT",
+            "WILDCARD",
+            "LOOPBACK"
+          ]
+        },
+        "kind": {
+          "const": "LISTENER"
+        },
+        "namespace_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
+        "port_end": {
+          "$ref": "#/$defs/u16"
+        },
+        "port_start": {
+          "$ref": "#/$defs/u16"
+        },
+        "process_ownership_required": {
+          "type": "boolean"
+        },
+        "protocol": {
+          "enum": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "namespace_entity_id",
+        "protocol",
+        "address_family",
+        "bind_semantics",
+        "port_start",
+        "port_end",
+        "process_ownership_required"
+      ],
+      "type": "object",
+      "x-routedoc-member-order": [
+        "kind",
+        "namespace_entity_id",
+        "protocol",
+        "address_family",
+        "bind_semantics",
+        "port_start",
+        "port_end",
+        "process_ownership_required"
+      ]
+    }
   },
-  "$defs":{
-    "time":{"type":"string","format":"date-time"},"id":{"type":"string","minLength":1,"pattern":"^[A-Za-z][A-Za-z0-9_.:/-]*$"},"runID":{"type":"string","pattern":"^run-[0-9]{6,}$"},"vantageID":{"type":"string","pattern":"^vantage-[A-Za-z0-9_.:/-]+$"},"capabilityID":{"type":"string","pattern":"^capability-[A-Za-z0-9_.:/-]+$"},"assertionID":{"type":"string","pattern":"^assertion-[A-Za-z0-9_.:/-]+$"},"entityID":{"type":"string","pattern":"^entity-[A-Za-z0-9_.:/-]+$"},"edgeID":{"type":"string","pattern":"^edge-[A-Za-z0-9_.:/-]+$"},"branchID":{"type":"string","pattern":"^branch-[A-Za-z0-9_.:/-]+$"},"checkID":{"type":"string","pattern":"^check-[A-Za-z0-9_.:/-]+$"},"executionID":{"type":"string","pattern":"^execution-[A-Za-z0-9_.:/-]+$"},"observationID":{"type":"string","pattern":"^observation-[A-Za-z0-9_.:/-]+$"},"visibilityID":{"type":"string","pattern":"^visibility-[A-Za-z0-9_.:/-]+$"},"claimID":{"type":"string","pattern":"^claim-[0-9]{6,}$"},"findingID":{"type":"string","pattern":"^finding-[0-9]{6,}$"},"limitationID":{"type":"string","pattern":"^limitation-[A-Za-z0-9_.:/-]+$"},"ruleID":{"type":"string","pattern":"^[a-z][a-z0-9_.-]*\\.[a-z][a-z0-9_.-]*/v[1-9][0-9]*$"},"nonNegative":{"type":"integer","minimum":0},"u16":{"type":"integer","minimum":0,"maximum":65535},
-    "producer":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["name","version","build"],"required":["name","version","build"],"properties":{"name":{"type":"string"},"version":{"type":"string"},"build":{"type":"string"}}},
-    "pathSummary":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["present","is_root","segment_count","trailing_slash","query_present"],"required":["present","is_root","segment_count","trailing_slash","query_present"],"properties":{"present":{"type":"boolean"},"is_root":{"type":"boolean"},"segment_count":{"type":"integer","minimum":0},"trailing_slash":{"type":"boolean"},"query_present":{"type":"boolean"}}},
-    "target":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["scheme","hostname","effective_port","path"],"required":["scheme","hostname","effective_port","path"],"properties":{"scheme":{"enum":["http","https"]},"hostname":{"type":"string"},"effective_port":{"$ref":"#/$defs/u16"},"path":{"$ref":"#/$defs/pathSummary"}}},
-    "goal":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","expectation_assertion_id"],"required":["kind"],"properties":{"kind":{"enum":["HTTP_RESPONSE","HTTP_EXPECTATION","ORIGIN_PATH_DIAGNOSIS"]},"expectation_assertion_id":{"$ref":"#/$defs/assertionID"}}},
-    "requestedScope":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind"],"required":["kind"],"properties":{"kind":{"enum":["CLIENT_ONLY","LOCAL_ORIGIN"]}}},"policy":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["coherence_window_ns"],"required":["coherence_window_ns"],"properties":{"coherence_window_ns":{"type":"integer"}}},
-    "limitationScope":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","vantage_id","observation_id","visibility_id","finding_id"],"required":["kind"],"properties":{"kind":{"enum":["RUN","VANTAGE","OBSERVATION","VISIBILITY","FINDING"]},"vantage_id":{"$ref":"#/$defs/vantageID"},"observation_id":{"$ref":"#/$defs/observationID"},"visibility_id":{"$ref":"#/$defs/visibilityID"},"finding_id":{"$ref":"#/$defs/findingID"}}},
-    "limitation":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["limitation_id","code","scope"],"required":["limitation_id","code","scope"],"properties":{"limitation_id":{"$ref":"#/$defs/limitationID"},"code":{"enum":["insufficient_privilege","tls_peer_unverified","unsupported_capability","unknown_vantage","partial_visibility","skipped_dependency","generic"]},"scope":{"$ref":"#/$defs/limitationScope"}}},
-    "clientIdentity":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","label"],"required":["kind","label"],"properties":{"kind":{"const":"CLIENT_NETWORK"},"label":{"type":"string"}}},"hostIdentity":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","namespace_inode"],"required":["kind","namespace_inode"],"properties":{"kind":{"const":"HOST_NAMESPACE"},"namespace_inode":{"type":"integer","minimum":1}}},"containerIdentity":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","daemon_id","container_id"],"required":["kind","daemon_id","container_id"],"properties":{"kind":{"const":"CONTAINER_NAMESPACE"},"daemon_id":{"type":"string"},"container_id":{"type":"string"}}},"unknownIdentity":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","reason_code"],"required":["kind","reason_code"],"properties":{"kind":{"const":"UNKNOWN_NAMESPACE"},"reason_code":{"type":"string"}}},
-    "identity":{"oneOf":[{"$ref":"#/$defs/clientIdentity"},{"$ref":"#/$defs/hostIdentity"},{"$ref":"#/$defs/containerIdentity"},{"$ref":"#/$defs/unknownIdentity"}]},
-    "vantage":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["vantage_id","kind","role","display_label","identity","parent_vantage_id","establishment","limitations"],"required":["vantage_id","kind","role","display_label","identity","establishment","limitations"],"properties":{"vantage_id":{"$ref":"#/$defs/vantageID"},"kind":{"enum":["CLIENT_NETWORK","HOST_NAMESPACE","CONTAINER_NAMESPACE","UNKNOWN_NAMESPACE"]},"role":{"enum":["CLIENT","ORIGIN_HOST","PROXY","UPSTREAM","UNSPECIFIED"]},"display_label":{"type":"string"},"identity":{"$ref":"#/$defs/identity"},"parent_vantage_id":{"$ref":"#/$defs/vantageID"},"establishment":{"enum":["DIRECTLY_OBSERVED","OPERATOR_SUPPLIED","RUNTIME_CORRELATED","UNKNOWN"]},"limitations":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"limitation_id","items":{"$ref":"#/$defs/limitation"}}}},
-    "assertion":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["assertion_id","kind","parameters","established_at","source"],"required":["assertion_id","kind","parameters","established_at","source"],"properties":{"assertion_id":{"$ref":"#/$defs/assertionID"},"kind":{"enum":["LOCAL_ORIGIN_PARTICIPATION","EXPECTED_PATH_EDGE","HTTP_EXPECTATION","CONFIG_SOURCE_SELECTION","PRIVATE_REDIRECT_TRANSITION_ALLOWED"]},"parameters":{"oneOf":[{"$ref":"#/$defs/localOrigin"},{"$ref":"#/$defs/expectedEdge"},{"$ref":"#/$defs/httpExpectation"},{"$ref":"#/$defs/configSource"},{"$ref":"#/$defs/privateRedirect"}]},"established_at":{"$ref":"#/$defs/time"},"source":{"enum":["COMMAND_LINE","EXPLICIT_CONFIG","SYNTHETIC_FIXTURE"]}}},
-    "localOrigin":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","url_target_entity_id","host_vantage_id"],"required":["kind","url_target_entity_id","host_vantage_id"],"properties":{"kind":{"const":"LOCAL_ORIGIN_PARTICIPATION"},"url_target_entity_id":{"$ref":"#/$defs/entityID"},"host_vantage_id":{"$ref":"#/$defs/vantageID"}}},"expectedEdge":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","from_entity_id","to_entity_id","relation"],"required":["kind","from_entity_id","to_entity_id","relation"],"properties":{"kind":{"const":"EXPECTED_PATH_EDGE"},"from_entity_id":{"$ref":"#/$defs/entityID"},"to_entity_id":{"$ref":"#/$defs/entityID"},"relation":{"enum":["RESOLVES_TO","CONNECTS_TO","NEGOTIATES_TLS_WITH","VERIFIES","REQUESTS_HTTP_FROM","REDIRECTS_TO","ROUTES_TO","SELECTS_UPSTREAM","LISTENS_ON","OWNED_BY","ASSOCIATED_WITH"]}}},"httpExpectation":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","expectation_kind","status_min","status_max","header_name"],"required":["kind","expectation_kind"],"properties":{"kind":{"const":"HTTP_EXPECTATION"},"expectation_kind":{"enum":["STATUS_RANGE","HEADER_PRESENT"]},"status_min":{"$ref":"#/$defs/u16"},"status_max":{"$ref":"#/$defs/u16"},"header_name":{"type":"string"}}},"configSource":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","component_kind","source_kind"],"required":["kind","component_kind","source_kind"],"properties":{"kind":{"const":"CONFIG_SOURCE_SELECTION"},"component_kind":{"enum":["CADDY","DOCKER"]},"source_kind":{"enum":["ACTIVE_API","EXPLICIT_FILE","ENGINE_ENDPOINT"]}}},"privateRedirect":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","from_address_scope","to_address_scope"],"required":["kind","from_address_scope","to_address_scope"],"properties":{"kind":{"const":"PRIVATE_REDIRECT_TRANSITION_ALLOWED"},"from_address_scope":{"type":"string"},"to_address_scope":{"type":"string"}}},
-    "entityIdentity":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","marker","hostname","address","port","transport","fingerprint","ordinal","synthetic_id","endpoint","pid","runtime_id","container_id","namespace_inode"],"required":["kind"],"properties":{"kind":{"enum":["URL_TARGET","HOSTNAME","IP_ADDRESS","SOCKET_ENDPOINT","TLS_PEER","HTTP_EXCHANGE","PROXY_INSTANCE","PROXY_ROUTE","UPSTREAM_ENDPOINT","LISTENER","PROCESS","CONTAINER","NETWORK_NAMESPACE"]},"marker":{"type":"boolean"},"hostname":{"type":"string"},"address":{"type":"string"},"port":{"$ref":"#/$defs/u16"},"transport":{"enum":["TCP","UDP"]},"fingerprint":{"type":"string"},"ordinal":{"type":"integer","minimum":0},"synthetic_id":{"type":"string"},"endpoint":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["address","port","transport"],"required":["address","port","transport"],"properties":{"address":{"type":"string"},"port":{"$ref":"#/$defs/u16"},"transport":{"enum":["TCP","UDP"]}}},"pid":{"type":"integer","minimum":1},"runtime_id":{"type":"string"},"container_id":{"type":"string"},"namespace_inode":{"type":"integer","minimum":1}}},"entity":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["entity_id","kind","display_label","identity"],"required":["entity_id","kind","display_label","identity"],"properties":{"entity_id":{"$ref":"#/$defs/entityID"},"kind":{"enum":["URL_TARGET","HOSTNAME","IP_ADDRESS","SOCKET_ENDPOINT","TLS_PEER","HTTP_EXCHANGE","PROXY_INSTANCE","PROXY_ROUTE","UPSTREAM_ENDPOINT","LISTENER","PROCESS","CONTAINER","NETWORK_NAMESPACE"]},"display_label":{"type":"string"},"identity":{"$ref":"#/$defs/entityIdentity"}}},
-    "evidenceRef":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","id"],"required":["kind","id"],"properties":{"kind":{"enum":["OBSERVATION","CLAIM","VISIBILITY","ASSERTION"]},"id":{"$ref":"#/$defs/id"}}},"node":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["entity_id"],"required":["entity_id"],"properties":{"entity_id":{"$ref":"#/$defs/entityID"}}},"edge":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["edge_id","from","to","relation","provenance","evidence_refs"],"required":["edge_id","from","to","relation","provenance","evidence_refs"],"properties":{"edge_id":{"$ref":"#/$defs/edgeID"},"from":{"$ref":"#/$defs/entityID"},"to":{"$ref":"#/$defs/entityID"},"relation":{"type":"string"},"provenance":{"enum":["OPERATOR_ASSERTED","DIRECTLY_OBSERVED","ACTIVE_RUNTIME_CONFIG","CONFIGURED_INTENT"]},"evidence_refs":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"kind,id","items":{"$ref":"#/$defs/evidenceRef"}}}},"branch":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["branch_id","parent_branch_id","ordered_edge_ids","goal"],"required":["branch_id","ordered_edge_ids","goal"],"properties":{"branch_id":{"$ref":"#/$defs/branchID"},"parent_branch_id":{"$ref":"#/$defs/branchID"},"ordered_edge_ids":{"type":"array","x-routedoc-array-kind":"ORDERED","items":{"$ref":"#/$defs/edgeID"}},"goal":{"enum":["HTTP_RESPONSE","HTTP_EXPECTATION","ORIGIN_PATH_DIAGNOSIS"]}}},"servicePath":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["nodes","edges","branches"],"required":["nodes","edges","branches"],"properties":{"nodes":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"entity_id","items":{"$ref":"#/$defs/node"}},"edges":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"edge_id","items":{"$ref":"#/$defs/edge"}},"branches":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"parent_then_branch_id","items":{"$ref":"#/$defs/branch"}}}},
-    "checkDefinition":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["check_id","kind","version","inputs","dependency_check_ids","required_capability_ids","execution_policy","expected_condition"],"required":["check_id","kind","version","inputs","dependency_check_ids","required_capability_ids","execution_policy","expected_condition"],"properties":{"check_id":{"$ref":"#/$defs/checkID"},"kind":{"type":"string"},"version":{"type":"string"},"inputs":{"$ref":"#/$defs/checkInputs"},"dependency_check_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"check_id","items":{"$ref":"#/$defs/checkID"}},"required_capability_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"capability_id","items":{"$ref":"#/$defs/capabilityID"}},"execution_policy":{"$ref":"#/$defs/executionPolicy"},"expected_condition":{"$ref":"#/$defs/expectedCondition"}}},"checkInputs":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","subject_entity_id","vantage_id","assertion_id"],"required":["kind","subject_entity_id"],"properties":{"kind":{"enum":["SUBJECT","NETWORK","WITH_ASSERTION"]},"subject_entity_id":{"$ref":"#/$defs/entityID"},"vantage_id":{"$ref":"#/$defs/vantageID"},"assertion_id":{"$ref":"#/$defs/assertionID"}}},"executionPolicy":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["deadline_ns","dependency_failure_reason_code","deadline_is_expected_condition"],"required":["deadline_ns","dependency_failure_reason_code","deadline_is_expected_condition"],"properties":{"deadline_ns":{"type":"integer"},"dependency_failure_reason_code":{"type":"string"},"deadline_is_expected_condition":{"type":"boolean"}}},"expectedCondition":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","result","address_family","port","hostname","status_min","status_max","matcher_result","capability_state"],"required":["kind"],"properties":{"kind":{"enum":["RESULT","FAMILY","PORT","HOSTNAME","STATUS_RANGE","MATCHER_RESULT","CAPABILITY_STATE"]},"result":{"type":"string"},"address_family":{"enum":["IPV4","IPV6"]},"port":{"$ref":"#/$defs/u16"},"hostname":{"type":"string"},"status_min":{"$ref":"#/$defs/u16"},"status_max":{"$ref":"#/$defs/u16"},"matcher_result":{"enum":["MATCHED","NOT_MATCHED","UNKNOWN"]},"capability_state":{"enum":["AVAILABLE","UNAVAILABLE","DENIED","UNKNOWN"]}}},
-    "checkExecution":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["execution_id","check_id","branch_id","vantage_id","started_at","finished_at","lifecycle","verdict","reason_code","observation_ids","visibility_assessment_ids"],"required":["execution_id","check_id","lifecycle","verdict","observation_ids","visibility_assessment_ids"],"properties":{"execution_id":{"$ref":"#/$defs/executionID"},"check_id":{"$ref":"#/$defs/checkID"},"branch_id":{"$ref":"#/$defs/branchID"},"vantage_id":{"$ref":"#/$defs/vantageID"},"started_at":{"$ref":"#/$defs/time"},"finished_at":{"$ref":"#/$defs/time"},"lifecycle":{"enum":["NOT_RUN","COMPLETED","UNAVAILABLE","DENIED","TIMED_OUT","ERROR"]},"verdict":{"enum":["PASS","FAIL","UNKNOWN","SKIPPED"]},"reason_code":{"type":"string"},"observation_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"observation_id","items":{"$ref":"#/$defs/observationID"}},"visibility_assessment_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"visibility_id","items":{"$ref":"#/$defs/visibilityID"}}}},
-    "observation":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["observation_id","kind","subject_entity_ids","vantage_id","observed_at","payload","acquisition_method","source_component","sensitivity","limitations"],"required":["observation_id","kind","subject_entity_ids","observed_at","payload","acquisition_method","source_component","sensitivity","limitations"],"properties":{"observation_id":{"$ref":"#/$defs/observationID"},"kind":{"type":"string"},"subject_entity_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"entity_id","items":{"$ref":"#/$defs/entityID"}},"vantage_id":{"$ref":"#/$defs/vantageID"},"observed_at":{"$ref":"#/$defs/time"},"payload":{"$ref":"#/$defs/observationPayload"},"acquisition_method":{"enum":["DIRECT_PROBE","ACTIVE_RUNTIME_API","CONFIGURED_INTENT_SOURCE","SYSTEM_INSPECTION","SYNTHETIC_FIXTURE"]},"source_component":{"type":"string"},"sensitivity":{"enum":["PUBLIC","SANITIZED_DERIVED"]},"limitations":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"limitation_id","items":{"$ref":"#/$defs/limitation"}}}},"observationPayload":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","hostname_entity_id","address_entity_id","address_family","result","endpoint_entity_id","duration_ns","deadline_part_of_expected_condition","peer_entity_id","protocol_version","cipher_suite","negotiated_alpn","sni_sent","alert_code","certificate_count","leaf_sha256","not_before","not_after","san_type","san_count","verified_hostname","verification_time","trust_source","failure_reason","exchange_entity_id","result_kind","status_code","redirect_target_entity_id","redirect_target","proxy_route_entity_id","upstream_entity_id","matcher_kind","match_result","listener_entity_id","namespace_entity_id","protocol","bind_semantics","port","process_entity_id","fact_kind","container_entity_id","runtime_state","capability_id","reason_code"],"required":["kind"],"properties":{"kind":{"type":"string"},"hostname_entity_id":{"$ref":"#/$defs/entityID"},"address_entity_id":{"$ref":"#/$defs/entityID"},"address_family":{"enum":["IPV4","IPV6"]},"result":{"type":"string"},"endpoint_entity_id":{"$ref":"#/$defs/entityID"},"duration_ns":{"type":"integer"},"deadline_part_of_expected_condition":{"type":"boolean"},"peer_entity_id":{"$ref":"#/$defs/entityID"},"protocol_version":{"type":"string"},"cipher_suite":{"type":"string"},"negotiated_alpn":{"type":"string"},"sni_sent":{"type":"string"},"alert_code":{"$ref":"#/$defs/u16"},"certificate_count":{"type":"integer","minimum":0},"leaf_sha256":{"type":"string"},"not_before":{"$ref":"#/$defs/time"},"not_after":{"$ref":"#/$defs/time"},"san_type":{"enum":["DNS","IP","OTHER"]},"san_count":{"type":"integer","minimum":0},"verified_hostname":{"type":"string"},"verification_time":{"$ref":"#/$defs/time"},"trust_source":{"enum":["SYSTEM","EXPLICIT","UNKNOWN"]},"failure_reason":{"type":"string"},"exchange_entity_id":{"$ref":"#/$defs/entityID"},"result_kind":{"enum":["RESPONSE","REDIRECT"]},"status_code":{"$ref":"#/$defs/u16"},"redirect_target_entity_id":{"$ref":"#/$defs/entityID"},"redirect_target":{"$ref":"#/$defs/target"},"proxy_route_entity_id":{"$ref":"#/$defs/entityID"},"upstream_entity_id":{"$ref":"#/$defs/entityID"},"matcher_kind":{"type":"string"},"match_result":{"enum":["MATCHED","NOT_MATCHED","UNKNOWN"]},"listener_entity_id":{"$ref":"#/$defs/entityID"},"namespace_entity_id":{"$ref":"#/$defs/entityID"},"protocol":{"enum":["TCP","UDP"]},"bind_semantics":{"enum":["EXACT","WILDCARD","LOOPBACK"]},"port":{"$ref":"#/$defs/u16"},"process_entity_id":{"$ref":"#/$defs/entityID"},"fact_kind":{"enum":["CONTAINER_STATE","NETWORK_MEMBERSHIP","PUBLISHED_PORT"]},"container_entity_id":{"$ref":"#/$defs/entityID"},"runtime_state":{"enum":["RUNNING","STOPPED","UNKNOWN"]},"capability_id":{"$ref":"#/$defs/capabilityID"},"reason_code":{"type":"string"}}},
-    "visibilityScope":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","namespace_entity_id","protocol","address_family","bind_semantics","port_start","port_end","process_ownership_required"],"required":["kind","namespace_entity_id","protocol","address_family","bind_semantics","port_start","port_end","process_ownership_required"],"properties":{"kind":{"const":"LISTENER"},"namespace_entity_id":{"$ref":"#/$defs/entityID"},"protocol":{"enum":["TCP","UDP"]},"address_family":{"enum":["IPV4","IPV6"]},"bind_semantics":{"enum":["EXACT","WILDCARD","LOOPBACK"]},"port_start":{"$ref":"#/$defs/u16"},"port_end":{"$ref":"#/$defs/u16"},"process_ownership_required":{"type":"boolean"}}},"visibility":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["visibility_id","subject_kind","vantage_id","scope","level","basis_observation_ids","limitations","assessed_at"],"required":["visibility_id","subject_kind","vantage_id","scope","level","basis_observation_ids","limitations","assessed_at"],"properties":{"visibility_id":{"$ref":"#/$defs/visibilityID"},"subject_kind":{"const":"LISTENER"},"vantage_id":{"$ref":"#/$defs/vantageID"},"scope":{"$ref":"#/$defs/visibilityScope"},"level":{"enum":["COMPLETE_FOR_SCOPE","PARTIAL","UNKNOWN","NOT_APPLICABLE"]},"basis_observation_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"observation_id","items":{"$ref":"#/$defs/observationID"}},"limitations":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"limitation_id","items":{"$ref":"#/$defs/limitation"}},"assessed_at":{"$ref":"#/$defs/time"}}},
-    "capability":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["capability_id","kind","state","reason_code"],"required":["capability_id","kind","state","reason_code"],"properties":{"capability_id":{"$ref":"#/$defs/capabilityID"},"kind":{"type":"string"},"state":{"enum":["AVAILABLE","UNAVAILABLE","DENIED","UNKNOWN"]},"reason_code":{"type":"string"}}},"evaluation":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["evaluated_at","ordered_rule_ids"],"required":["evaluated_at","ordered_rule_ids"],"properties":{"evaluated_at":{"$ref":"#/$defs/time"},"ordered_rule_ids":{"type":"array","x-routedoc-array-kind":"ORDERED","items":{"$ref":"#/$defs/ruleID"}}}},
-    "claimParams":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","peer_entity_id","hostname","verification_time","trust_source","endpoint_entity_id","vantage_id","observed_at","namespace_entity_id","protocol","address_family","bind_semantics","port"],"required":["kind"],"properties":{"kind":{"enum":["TLS_CERTIFICATE_HOSTNAME_MISMATCH","TCP_CONNECTION_REFUSED","NO_MATCHING_LISTENER_VISIBLE"]},"peer_entity_id":{"$ref":"#/$defs/entityID"},"hostname":{"type":"string"},"verification_time":{"$ref":"#/$defs/time"},"trust_source":{"enum":["SYSTEM","EXPLICIT","UNKNOWN"]},"endpoint_entity_id":{"$ref":"#/$defs/entityID"},"vantage_id":{"$ref":"#/$defs/vantageID"},"observed_at":{"$ref":"#/$defs/time"},"namespace_entity_id":{"$ref":"#/$defs/entityID"},"protocol":{"enum":["TCP","UDP"]},"address_family":{"enum":["IPV4","IPV6"]},"bind_semantics":{"enum":["EXACT","WILDCARD","LOOPBACK"]},"port":{"$ref":"#/$defs/u16"}}},"missing":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["kind","observation_kind","visibility_subject_kind","visibility_scope","vantage_id"],"required":["kind"],"properties":{"kind":{"enum":["OBSERVATION_REQUIRED","VISIBILITY_REQUIRED","VANTAGE_REQUIRED"]},"observation_kind":{"type":"string"},"visibility_subject_kind":{"const":"LISTENER"},"visibility_scope":{"$ref":"#/$defs/visibilityScope"},"vantage_id":{"$ref":"#/$defs/vantageID"}}},
-    "claim":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["claim_id","statement_code","level","subject_entity_ids","branch_ids","parameters","supporting_evidence","contradicting_evidence","required_missing_evidence","rule_id"],"required":["claim_id","statement_code","level","subject_entity_ids","branch_ids","parameters","supporting_evidence","contradicting_evidence","required_missing_evidence","rule_id"],"properties":{"claim_id":{"$ref":"#/$defs/claimID"},"statement_code":{"enum":["TLS_CERTIFICATE_HOSTNAME_MISMATCH","TCP_CONNECTION_REFUSED","NO_MATCHING_LISTENER_VISIBLE"]},"level":{"enum":["OBSERVED","INFERRED","SUSPECTED"]},"subject_entity_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"entity_id","items":{"$ref":"#/$defs/entityID"}},"branch_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"branch_id","items":{"$ref":"#/$defs/branchID"}},"parameters":{"$ref":"#/$defs/claimParams"},"supporting_evidence":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"kind,id","items":{"$ref":"#/$defs/evidenceRef"}},"contradicting_evidence":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"kind,id","items":{"$ref":"#/$defs/evidenceRef"}},"required_missing_evidence":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"kind","items":{"$ref":"#/$defs/missing"}},"rule_id":{"$ref":"#/$defs/ruleID"}}},"pathPosition":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["branch_id","position"],"required":["branch_id","position"],"properties":{"branch_id":{"$ref":"#/$defs/branchID"},"position":{"type":"integer","minimum":0}}},"finding":{"type":"object","additionalProperties":false,"x-routedoc-member-order":["finding_id","kind","title_code","level","branch_ids","path_positions","claim_ids","rule_id","limitations","suggested_experiments","selection"],"required":["finding_id","kind","title_code","level","branch_ids","path_positions","claim_ids","rule_id","limitations","suggested_experiments","selection"],"properties":{"finding_id":{"$ref":"#/$defs/findingID"},"kind":{"enum":["BLOCKER","EXPECTATION_FAILURE","PARTIAL_REACHABILITY","ADVISORY","LIMITATION"]},"title_code":{"enum":["TLS_CERTIFICATE_HOSTNAME_MISMATCH","TCP_CONNECTION_REFUSED","NO_MATCHING_LISTENER_VISIBLE"]},"level":{"enum":["OBSERVED","INFERRED","SUSPECTED"]},"branch_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"branch_id","items":{"$ref":"#/$defs/branchID"}},"path_positions":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"branch_id","items":{"$ref":"#/$defs/pathPosition"}},"claim_ids":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"claim_id","items":{"$ref":"#/$defs/claimID"}},"rule_id":{"$ref":"#/$defs/ruleID"},"limitations":{"type":"array","x-routedoc-array-kind":"SET","x-routedoc-sort-key":"limitation_id","items":{"$ref":"#/$defs/limitation"}},"suggested_experiments":{"type":"array","x-routedoc-array-kind":"ORDERED","items":{"type":"string"}},"selection":{"enum":["GLOBAL_PRIMARY","BRANCH_PRIMARY","ADDITIONAL","NONE"]}}}
-  }
+  "$id": "https://routedoc.invalid/schema/report/v1.0.0/schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "items": {
+        "$ref": "#/$defs/capability"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "capability_id"
+    },
+    "check_definitions": {
+      "items": {
+        "$ref": "#/$defs/checkDefinition"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "check_id"
+    },
+    "check_executions": {
+      "items": {
+        "$ref": "#/$defs/checkExecution"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "execution_id"
+    },
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/claim"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "claim_id"
+    },
+    "entities": {
+      "items": {
+        "$ref": "#/$defs/entity"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "entity_id"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/evaluation"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/finding"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "finding_id"
+    },
+    "finished_at": {
+      "$ref": "#/$defs/time"
+    },
+    "goal": {
+      "$ref": "#/$defs/goal"
+    },
+    "limitations": {
+      "items": {
+        "$ref": "#/$defs/limitation"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "limitation_id"
+    },
+    "observations": {
+      "items": {
+        "$ref": "#/$defs/observation"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "observation_id"
+    },
+    "operator_assertions": {
+      "items": {
+        "$ref": "#/$defs/assertion"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "assertion_id"
+    },
+    "policy": {
+      "$ref": "#/$defs/policy"
+    },
+    "producer": {
+      "$ref": "#/$defs/producer"
+    },
+    "report_schema_version": {
+      "const": "1.0.0"
+    },
+    "requested_scope": {
+      "$ref": "#/$defs/requestedScope"
+    },
+    "run_id": {
+      "$ref": "#/$defs/runID"
+    },
+    "service_path": {
+      "$ref": "#/$defs/servicePath"
+    },
+    "started_at": {
+      "$ref": "#/$defs/time"
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "vantage_points": {
+      "items": {
+        "$ref": "#/$defs/vantage"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "vantage_id"
+    },
+    "visibility_assessments": {
+      "items": {
+        "$ref": "#/$defs/visibility"
+      },
+      "type": "array",
+      "x-routedoc-array-kind": "SET",
+      "x-routedoc-sort-key": "visibility_id"
+    }
+  },
+  "required": [
+    "report_schema_version",
+    "producer",
+    "run_id",
+    "target",
+    "goal",
+    "requested_scope",
+    "policy",
+    "started_at",
+    "finished_at",
+    "vantage_points",
+    "capabilities",
+    "operator_assertions",
+    "entities",
+    "service_path",
+    "check_definitions",
+    "check_executions",
+    "observations",
+    "visibility_assessments",
+    "evaluation",
+    "claims",
+    "findings",
+    "limitations"
+  ],
+  "title": "RouteDoctor report 1.0.0",
+  "type": "object",
+  "x-routedoc-member-order": [
+    "report_schema_version",
+    "producer",
+    "run_id",
+    "target",
+    "goal",
+    "requested_scope",
+    "policy",
+    "started_at",
+    "finished_at",
+    "vantage_points",
+    "capabilities",
+    "operator_assertions",
+    "entities",
+    "service_path",
+    "check_definitions",
+    "check_executions",
+    "observations",
+    "visibility_assessments",
+    "evaluation",
+    "claims",
+    "findings",
+    "limitations"
+  ]
 }

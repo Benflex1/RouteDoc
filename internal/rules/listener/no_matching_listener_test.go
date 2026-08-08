@@ -53,6 +53,12 @@ func TestNoMatchingListenerRejectsUnrelatedOrMismatchedInventoryBasis(t *testing
 			r.VisibilityAssessments[0].Scope.Listener.PortStart = 443
 			r.VisibilityAssessments[0].Scope.Listener.PortEnd = 443
 		}},
+		{name: "denied inventory basis", mutate: func(r *model.EvidenceRun) {
+			r.Observations[0].Limitations = []model.Limitation{{LimitationID: "limitation-000001", Code: model.LimitationInsufficientPrivilege, Scope: model.LimitationScope{Kind: model.LimitationObservation}}}
+		}},
+		{name: "unavailable inventory", mutate: func(r *model.EvidenceRun) {
+			r.VisibilityAssessments[0].Level = model.VisibilityUnknown
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,6 +72,16 @@ func TestNoMatchingListenerRejectsUnrelatedOrMismatchedInventoryBasis(t *testing
 				t.Fatalf("unrelated basis produced absence: %#v", got)
 			}
 		})
+	}
+}
+
+func TestNoMatchingListenerRejectsWrongVantageBasis(t *testing.T) {
+	r := listenerEvidence(model.VisibilityCompleteForScope, false)
+	other := model.VantagePoint{VantageID: "vantage-000002", Kind: model.VantageKindHostNamespace, Role: model.VantageRoleOriginHost, DisplayLabel: "other host", Identity: model.VantageIdentity{Kind: model.VantageKindHostNamespace, HostNamespace: &model.HostNamespaceIdentity{NamespaceInode: 8}}, Establishment: model.VantageDirectlyObserved, Limitations: []model.Limitation{}}
+	r.VantagePoints = append(r.VantagePoints, other)
+	r.Observations[0].VantageID = &other.VantageID
+	if model.ListenerAbsenceEvidenceValid(r, r.VisibilityAssessments[0], r.Target.EffectivePort) {
+		t.Fatal("wrong-vantage inventory basis was accepted")
 	}
 }
 

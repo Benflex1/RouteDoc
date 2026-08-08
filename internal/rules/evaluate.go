@@ -20,6 +20,9 @@ type compiledCandidate struct {
 }
 
 func (e Evaluator) Evaluate(v model.ValidatedEvidenceRun, clock time.Time) (model.ValidatedEvaluatedRun, model.ValidationIssues) {
+	if !v.Value().ReportSchemaVersion.Exact() {
+		return model.ValidatedEvaluatedRun{}, model.ValidationIssues{{Code: model.CodeExactVersionRequired, Pointer: "/report_schema_version", Message: "evaluation requires exact schema version"}}
+	}
 	clock = clock.UTC()
 	var is model.ValidationIssues
 	candidates := make([]compiledCandidate, 0)
