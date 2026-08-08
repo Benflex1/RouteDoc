@@ -15,40 +15,17 @@ func (noMatchingListenerVisible) Evaluate(v model.ValidatedEvidenceRun) []ruleap
 	r := v.Value()
 	out := []ruleapi.RuleCandidate{}
 	for _, vis := range r.VisibilityAssessments {
-		if vis.Level != model.VisibilityCompleteForScope || vis.Scope.Listener == nil || vis.VantageID == "" {
+		if vis.Scope.Listener == nil || !model.ListenerAbsenceEvidenceValid(r, vis, r.Target.EffectivePort) {
 			continue
 		}
 		s := vis.Scope.Listener
 		basis := []ruleapi.EvidenceTemplate{}
-		hasProcess := false
 		for _, id := range vis.BasisObservationIDs {
 			basis = append(basis, ruleapi.EvidenceTemplate{Kind: model.EvidenceKindObservation, ObservationID: id})
-			for _, o := range r.Observations {
-				if o.ObservationID == id && o.VantageID != nil && *o.VantageID == vis.VantageID {
-					if o.Kind == model.ObservationProcessOwnership {
-						hasProcess = true
-					}
-				}
-			}
-		}
-		if s.ProcessOwnershipRequired && !hasProcess {
-			continue
-		}
-		matching := false
-		for _, o := range r.Observations {
-			if o.Kind != model.ObservationListenerInventory || o.Payload.Listener == nil || o.VantageID == nil || *o.VantageID != vis.VantageID {
-				continue
-			}
-			p := o.Payload.Listener
-			if p.NamespaceEntityID == s.NamespaceEntityID && p.Protocol == s.Protocol && p.AddressFamily == s.AddressFamily && p.BindSemantics == s.BindSemantics && p.Port >= s.PortStart && p.Port <= s.PortEnd {
-				matching = true
-			}
-		}
-		if matching || len(basis) == 0 {
-			continue
 		}
 		branches, positions := branchesFor(r, vis.VisibilityID)
 		c := ruleapi.ClaimTemplate{LocalKey: "absence", StatementCode: model.StatementNoMatchingListenerVisible, Level: model.ClaimLevelInferred, SubjectEntityIDs: []model.EntityID{s.NamespaceEntityID}, BranchIDs: branches, Parameters: model.ClaimParameters{Kind: model.StatementNoMatchingListenerVisible, ListenerAbsent: &model.ListenerAbsentClaimParameters{NamespaceEntityID: s.NamespaceEntityID, VantageID: vis.VantageID, Protocol: s.Protocol, AddressFamily: s.AddressFamily, BindSemantics: s.BindSemantics, Port: s.PortStart}}, SupportingEvidence: append([]ruleapi.EvidenceTemplate{{Kind: model.EvidenceKindVisibility, VisibilityID: vis.VisibilityID}}, basis...), ContradictingEvidence: []ruleapi.EvidenceTemplate{}, RequiredMissingEvidence: []model.MissingEvidenceRequirement{}}
+		c.Parameters.ListenerAbsent.Port = r.Target.EffectivePort
 		f := ruleapi.FindingTemplate{Kind: model.FindingBlocker, TitleCode: model.TitleNoMatchingListenerVisible, Level: model.ClaimLevelInferred, BranchIDs: append([]model.BranchID{}, branches...), PathPositions: positions, ClaimLocalKeys: []string{"absence"}, Limitations: []model.Limitation{}, SuggestedExperiments: []string{"inspect the listener in the matching namespace"}, Selection: model.SelectionNone}
 		out = append(out, ruleapi.RuleCandidate{CandidateKey: "listener-" + string(vis.VisibilityID), Claims: []ruleapi.ClaimTemplate{c}, Findings: []ruleapi.FindingTemplate{f}})
 	}

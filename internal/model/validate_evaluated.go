@@ -84,6 +84,9 @@ func ValidatePersistedEvaluatedRun(r EvaluatedRun) (ValidatedEvaluatedRun, Valid
 	}
 	for i, c := range r.Claims {
 		validateClaimRefs(&is, c, i, r, claimByID, rules)
+		if c.StatementCode == StatementNoMatchingListenerVisible {
+			validateListenerAbsenceClaim(&is, c, i, r)
+		}
 	}
 	validateClaimGraphs(&is, r, claimByID)
 	findingByID := map[FindingID]int{}
@@ -210,6 +213,58 @@ func validateClaimParameters(is *ValidationIssues, c Claim, p string) {
 		v := c.Parameters.ListenerAbsent
 		if !v.VantageID.Valid() || !v.Protocol.Valid() || !v.AddressFamily.Valid() || !v.BindSemantics.Valid() {
 			addIssue(is, CodeInvalidValue, p+"/parameters", "invalid listener absence parameters")
+		}
+	}
+}
+
+func validateListenerAbsenceClaim(is *ValidationIssues, c Claim, index int, r EvaluatedRun) {
+	prefix := fmt.Sprintf("/claims/%d", index)
+	v := c.Parameters.ListenerAbsent
+	if v == nil {
+		return
+	}
+	if c.Level != ClaimLevelInferred {
+		addIssue(is, CodeClaimInvalidSupportLevel, prefix+"/level", "listener absence must be inferred")
+	}
+	if v.Port != r.Evidence.Target.EffectivePort {
+		addIssue(is, CodeVisibilityScopeMismatch, prefix+"/parameters/port", "listener absence port must match target port")
+	}
+	var visibility *VisibilityAssessment
+	supportedObservations := map[ObservationID]bool{}
+	for _, ref := range c.SupportingEvidence {
+		switch ref.Kind {
+		case EvidenceKindVisibility:
+			if ref.VisibilityID != nil {
+				for i := range r.Evidence.VisibilityAssessments {
+					if r.Evidence.VisibilityAssessments[i].VisibilityID == *ref.VisibilityID {
+						if visibility != nil {
+							addIssue(is, CodeVisibilityScopeMismatch, prefix+"/supporting_evidence", "listener absence requires one visibility assessment")
+						} else {
+							visibility = &r.Evidence.VisibilityAssessments[i]
+						}
+					}
+				}
+			}
+		case EvidenceKindObservation:
+			if ref.ObservationID != nil {
+				supportedObservations[*ref.ObservationID] = true
+			}
+		}
+	}
+	if visibility == nil {
+		addIssue(is, CodeVisibilityInsufficientForAbsence, prefix+"/supporting_evidence", "listener absence requires a visibility assessment")
+		return
+	}
+	s := visibility.Scope.Listener
+	if s == nil || v.NamespaceEntityID != s.NamespaceEntityID || v.VantageID != visibility.VantageID || v.Protocol != s.Protocol || v.AddressFamily != s.AddressFamily || v.BindSemantics != s.BindSemantics {
+		addIssue(is, CodeVisibilityScopeMismatch, prefix+"/parameters", "listener absence parameters do not match visibility scope")
+	}
+	if !ListenerAbsenceEvidenceValid(r.Evidence, *visibility, v.Port) {
+		addIssue(is, CodeVisibilityInsufficientForAbsence, prefix+"/supporting_evidence", "listener absence evidence does not prove completed scoped inventory")
+	}
+	for _, id := range visibility.BasisObservationIDs {
+		if !supportedObservations[id] {
+			addIssue(is, CodeJustificationMissing, prefix+"/supporting_evidence", "listener absence must cite every visibility basis observation")
 		}
 	}
 }

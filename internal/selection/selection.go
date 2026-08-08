@@ -16,8 +16,10 @@ func Apply(in model.EvaluatedRun) (model.EvaluatedRun, model.ValidationIssues) {
 		out.Findings[i].Selection = model.SelectionNone
 	}
 	branches := out.Evidence.ServicePath.Branches
+	branchByID := map[model.BranchID]model.Branch{}
 	children := map[model.BranchID]bool{}
 	for _, b := range branches {
+		branchByID[b.BranchID] = b
 		if b.ParentBranchID != nil {
 			children[*b.ParentBranchID] = true
 		}
@@ -33,15 +35,14 @@ func Apply(in model.EvaluatedRun) (model.EvaluatedRun, model.ValidationIssues) {
 	for _, bid := range leaves {
 		candidates := make([]candidate, 0)
 		for i, f := range out.Findings {
-			if f.Kind != model.FindingBlocker || (f.Level != model.ClaimLevelObserved && f.Level != model.ClaimLevelInferred) || !containsBranch(f.BranchIDs, bid) {
+			if f.Kind != model.FindingBlocker || (f.Level != model.ClaimLevelObserved && f.Level != model.ClaimLevelInferred) {
 				continue
 			}
-			pos, ok := position(f, bid)
+			attached, pos, ok := findingBranchPosition(f, bid, branchByID)
 			if !ok {
-				issues = append(issues, model.ValidationIssue{Code: model.CodeFindingInvalidGlobalPrimary, Pointer: "/findings", Message: "finding has no path position for branch"})
 				continue
 			}
-			if pos >= branchEdgeCount(branches, bid) {
+			if pos >= branchEdgeCount(branches, attached) {
 				issues = append(issues, model.ValidationIssue{Code: model.CodeFindingInvalidGlobalPrimary, Pointer: "/findings", Message: "finding path position is outside branch"})
 				continue
 			}
@@ -73,27 +74,53 @@ func Apply(in model.EvaluatedRun) (model.EvaluatedRun, model.ValidationIssues) {
 		}
 	}
 
+	globalCandidates := make([]int, 0)
 	for i, f := range out.Findings {
 		if f.Kind != model.FindingBlocker || (f.Level != model.ClaimLevelObserved && f.Level != model.ClaimLevelInferred) || len(leaves) == 0 {
 			continue
 		}
-		covered := true
-		for _, bid := range leaves {
-			if !containsBranch(f.BranchIDs, bid) {
-				covered = false
-				break
-			}
+		if model.GlobalPrimaryProof(f, branches) {
+			globalCandidates = append(globalCandidates, i)
 		}
-		if covered {
-			out.Findings[i].Selection = model.SelectionGlobalPrimary
-			for j := range out.Findings {
-				if j != i && out.Findings[j].Selection == model.SelectionGlobalPrimary {
-					out.Findings[j].Selection = model.SelectionAdditional
-				}
+	}
+	if len(globalCandidates) > 0 {
+		sort.Slice(globalCandidates, func(i, j int) bool {
+			a, b := out.Findings[globalCandidates[i]], out.Findings[globalCandidates[j]]
+			if a.Level != b.Level {
+				return a.Level == model.ClaimLevelObserved
+			}
+			return lessFinding(a, b)
+		})
+		for i, index := range globalCandidates {
+			if i == 0 {
+				out.Findings[index].Selection = model.SelectionGlobalPrimary
+			} else {
+				out.Findings[index].Selection = model.SelectionAdditional
 			}
 		}
 	}
 	return out, issues
+}
+
+func findingBranchPosition(f model.Finding, leaf model.BranchID, branches map[model.BranchID]model.Branch) (model.BranchID, uint64, bool) {
+	current := leaf
+	seen := map[model.BranchID]bool{}
+	for {
+		if seen[current] {
+			return "", 0, false
+		}
+		seen[current] = true
+		if containsBranch(f.BranchIDs, current) {
+			if pos, ok := position(f, current); ok {
+				return current, pos, true
+			}
+		}
+		b, ok := branches[current]
+		if !ok || b.ParentBranchID == nil {
+			return "", 0, false
+		}
+		current = *b.ParentBranchID
+	}
 }
 
 func containsBranch(v []model.BranchID, id model.BranchID) bool {
