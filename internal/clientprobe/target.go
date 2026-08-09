@@ -40,11 +40,10 @@ func parseTarget(raw string) (requestTarget, error) {
 		return requestTarget{}, &InputError{Code: "missing_host"}
 	}
 	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
-	if !validTargetHostname(host) {
-		return requestTarget{}, &InputError{Code: "invalid_hostname"}
-	}
 	if address, parseErr := netip.ParseAddr(host); parseErr == nil {
 		host = address.String()
+	} else if !validTargetHostname(host) {
+		return requestTarget{}, &InputError{Code: "invalid_hostname"}
 	}
 	explicitPort := u.Port() != ""
 	port := uint16(0)

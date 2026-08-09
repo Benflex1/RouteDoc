@@ -65,6 +65,7 @@ func TestParseTargetPreservesRequestAuthoritySeparatelyFromEffectivePort(t *test
 		{name: "https explicit", raw: "https://example.test:8443/", authority: "example.test:8443", port: 8443},
 		{name: "ipv6 implicit", raw: "http://[2001:db8::1]/", authority: "[2001:db8::1]", port: 80},
 		{name: "ipv6 explicit", raw: "https://[2001:db8::1]:8443/", authority: "[2001:db8::1]:8443", port: 8443},
+		{name: "ipv6 canonicalized", raw: "http://[2001:0DB8:0:0:0:0:0:1]/", authority: "[2001:db8::1]", port: 80},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
