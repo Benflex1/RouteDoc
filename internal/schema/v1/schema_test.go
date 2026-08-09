@@ -38,6 +38,31 @@ func TestSchemaContract(t *testing.T) {
 	checkSchemaAnnotations(t, doc, "#")
 }
 
+func TestTLSTransportSchemaRequiresEndpointAndAllowsAbsentPeer(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "schema", "report", "v1.0.0", "schema.json")
+	compiler := jsonschema.NewCompiler()
+	schema, err := compiler.Compile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := tlsTransportReport("entity-endpoint", "entity-peer", "TIMED_OUT", false)
+	if err := schema.Validate(valid); err != nil {
+		t.Fatalf("endpoint-attributed transport without peer rejected: %v", err)
+	}
+	payload := valid["observations"].([]interface{})[0].(map[string]interface{})["payload"].(map[string]interface{})
+	delete(payload, "endpoint_entity_id")
+	if err := schema.Validate(valid); err == nil {
+		t.Fatal("transport without endpoint accepted")
+	}
+
+	valid = tlsTransportReport("entity-endpoint", "entity-peer", "COMPLETED", true)
+	payload = valid["observations"].([]interface{})[0].(map[string]interface{})["payload"].(map[string]interface{})
+	payload["PeerEntityID"] = "entity-peer"
+	if err := schema.Validate(valid); err == nil {
+		t.Fatal("case-variant transport field accepted")
+	}
+}
+
 func TestClosedUnionSchemaCases(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "schema", "report", "v1.0.0", "schema.json")
 	c := jsonschema.NewCompiler()

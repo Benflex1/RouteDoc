@@ -156,7 +156,7 @@ func validateExecution(is *ValidationIssues, e CheckExecution, p string, entitie
 		}
 	}
 }
-func validateObservation(is *ValidationIssues, o Observation, p string, entities map[EntityID]bool, vantages map[VantageID]bool) {
+func validateObservation(is *ValidationIssues, o Observation, p string, entities map[EntityID]Entity, vantages map[VantageID]bool) {
 	if !o.Kind.Valid() {
 		addIssue(is, CodeUnknownUnionKind, p+"/kind", "unknown observation kind")
 	}
@@ -164,7 +164,7 @@ func validateObservation(is *ValidationIssues, o Observation, p string, entities
 		addIssue(is, CodeMissingRequiredField, p+"/subject_entity_ids", "required collection")
 	}
 	for _, id := range o.SubjectEntityIDs {
-		if !entities[id] {
+		if !entityExists(entities, id) {
 			addIssue(is, CodeReferenceMissing, p+"/subject_entity_ids", "entity missing")
 		}
 	}
@@ -245,7 +245,7 @@ func payloadCount(p ObservationPayload) int {
 	}
 	return n
 }
-func validatePayload(is *ValidationIssues, o Observation, p string, entities map[EntityID]bool) {
+func validatePayload(is *ValidationIssues, o Observation, p string, entities map[EntityID]Entity) {
 	switch o.Kind {
 	case ObservationSystemResolution:
 		if o.Payload.Resolution != nil {
@@ -253,10 +253,10 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if !v.AddressFamily.Valid() || !v.Result.Valid() {
 				addIssue(is, CodeUnknownEnumValue, p+"/payload", "invalid resolution enum")
 			}
-			if !entities[v.HostnameEntityID] {
+			if !entityExists(entities, v.HostnameEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/hostname_entity_id", "entity missing")
 			}
-			if v.AddressEntityID != nil && !entities[*v.AddressEntityID] {
+			if v.AddressEntityID != nil && !entityExists(entities, *v.AddressEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/address_entity_id", "entity missing")
 			}
 		}
@@ -269,7 +269,7 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if v.DurationNS < 0 {
 				addIssue(is, CodeInvalidValue, p+"/payload/duration_ns", "duration must be non-negative")
 			}
-			if !entities[v.EndpointEntityID] {
+			if !entityExists(entities, v.EndpointEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/endpoint_entity_id", "entity missing")
 			}
 		}
@@ -294,14 +294,15 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 					addIssue(is, CodeSensitiveDisallowedField, p+"/payload/sni_sent", err.Error())
 				}
 			}
-			if !entities[v.PeerEntityID] {
-				addIssue(is, CodeReferenceMissing, p+"/payload/peer_entity_id", "entity missing")
+			validateTypedEntityReference(is, entities, v.EndpointEntityID, EntitySocketEndpoint, p+"/payload/endpoint_entity_id")
+			if v.PeerEntityID != nil {
+				validateTypedEntityReference(is, entities, *v.PeerEntityID, EntityTLSPeer, p+"/payload/peer_entity_id")
 			}
 		}
 	case ObservationTLSPeer:
 		if o.Payload.TLSPeer != nil {
 			v := o.Payload.TLSPeer
-			if !entities[v.PeerEntityID] {
+			if !entityExists(entities, v.PeerEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/peer_entity_id", "entity missing")
 			}
 			if v.NotBefore.Location() != time.UTC || v.NotAfter.Location() != time.UTC {
@@ -326,7 +327,7 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if v.VerificationTime.Location() != time.UTC {
 				addIssue(is, CodeInvalidValue, p+"/payload/verification_time", "time must be UTC")
 			}
-			if !entities[v.PeerEntityID] {
+			if !entityExists(entities, v.PeerEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/peer_entity_id", "entity missing")
 			}
 			if err := validateHostname(v.VerifiedHostname); err != nil {
@@ -339,7 +340,7 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if !v.ResultKind.Valid() {
 				addIssue(is, CodeUnknownEnumValue, p+"/payload/result_kind", "unknown HTTP result")
 			}
-			if !entities[v.ExchangeEntityID] {
+			if !entityExists(entities, v.ExchangeEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/exchange_entity_id", "entity missing")
 			}
 			if v.RedirectTarget != nil && !v.RedirectTarget.Path.Present && v.RedirectTarget.Path.IsRoot {
@@ -357,10 +358,10 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if !v.MatchResult.Valid() {
 				addIssue(is, CodeUnknownEnumValue, p+"/payload/match_result", "unknown matcher result")
 			}
-			if !entities[v.ProxyRouteEntityID] {
+			if !entityExists(entities, v.ProxyRouteEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/proxy_route_entity_id", "entity missing")
 			}
-			if v.UpstreamEntityID != nil && !entities[*v.UpstreamEntityID] {
+			if v.UpstreamEntityID != nil && !entityExists(entities, *v.UpstreamEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/upstream_entity_id", "entity missing")
 			}
 			if err := validateSafeToken(v.MatcherKind, 64); err != nil {
@@ -373,10 +374,10 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if !v.Result.Valid() {
 				addIssue(is, CodeUnknownEnumValue, p+"/payload/result", "unknown upstream result")
 			}
-			if !entities[v.ProxyRouteEntityID] {
+			if !entityExists(entities, v.ProxyRouteEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/proxy_route_entity_id", "entity missing")
 			}
-			if v.UpstreamEntityID != nil && !entities[*v.UpstreamEntityID] {
+			if v.UpstreamEntityID != nil && !entityExists(entities, *v.UpstreamEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/upstream_entity_id", "entity missing")
 			}
 		}
@@ -386,7 +387,7 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if !v.Protocol.Valid() || !v.AddressFamily.Valid() || !v.BindSemantics.Valid() {
 				addIssue(is, CodeUnknownEnumValue, p+"/payload", "invalid listener enum")
 			}
-			if !entities[v.ListenerEntityID] || !entities[v.NamespaceEntityID] {
+			if !entityExists(entities, v.ListenerEntityID) || !entityExists(entities, v.NamespaceEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload", "listener or namespace missing")
 			}
 		}
@@ -405,7 +406,7 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if v.PortStart > v.PortEnd {
 				addIssue(is, CodeInvalidValue, p+"/payload/port_start", "listener inventory result port range is invalid")
 			}
-			if !entities[v.NamespaceEntityID] {
+			if !entityExists(entities, v.NamespaceEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/namespace_entity_id", "namespace missing")
 			}
 		}
@@ -415,10 +416,10 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if !v.Result.Valid() {
 				addIssue(is, CodeUnknownEnumValue, p+"/payload/result", "unknown ownership result")
 			}
-			if !entities[v.ListenerEntityID] {
+			if !entityExists(entities, v.ListenerEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/listener_entity_id", "listener missing")
 			}
-			if v.ProcessEntityID != nil && !entities[*v.ProcessEntityID] {
+			if v.ProcessEntityID != nil && !entityExists(entities, *v.ProcessEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/process_entity_id", "process missing")
 			}
 		}
@@ -428,7 +429,7 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 			if !v.FactKind.Valid() || !v.RuntimeState.Valid() {
 				addIssue(is, CodeUnknownEnumValue, p+"/payload", "invalid Docker summary enum")
 			}
-			if !entities[v.ContainerEntityID] {
+			if !entityExists(entities, v.ContainerEntityID) {
 				addIssue(is, CodeReferenceMissing, p+"/payload/container_entity_id", "container missing")
 			}
 		}
@@ -443,6 +444,23 @@ func validatePayload(is *ValidationIssues, o Observation, p string, entities map
 		}
 	}
 }
+
+func entityExists(entities map[EntityID]Entity, id EntityID) bool {
+	_, ok := entities[id]
+	return ok
+}
+
+func validateTypedEntityReference(is *ValidationIssues, entities map[EntityID]Entity, id EntityID, want EntityKind, p string) {
+	e, ok := entities[id]
+	if !ok {
+		addIssue(is, CodeReferenceMissing, p, "entity missing")
+		return
+	}
+	if e.Kind != want {
+		addIssue(is, CodeReferenceKindMismatch, p, "entity kind mismatch")
+	}
+}
+
 func validateVisibility(is *ValidationIssues, v VisibilityAssessment, p string, entities map[EntityID]bool, vantages map[VantageID]bool, obs map[ObservationID]bool, all []Observation, run EvidenceRun) {
 	if !v.SubjectKind.Valid() {
 		addIssue(is, CodeUnknownUnionKind, p+"/subject_kind", "unknown visibility subject")

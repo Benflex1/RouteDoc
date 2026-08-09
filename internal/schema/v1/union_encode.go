@@ -139,7 +139,8 @@ func (p wPayload) MarshalJSON() ([]byte, error) {
 	case "TLS_TRANSPORT_RESULT":
 		return marshalOrdered(struct {
 			Kind     string  `json:"kind"`
-			Peer     string  `json:"peer_entity_id"`
+			Endpoint string  `json:"endpoint_entity_id"`
+			Peer     *string `json:"peer_entity_id,omitempty"`
 			Result   string  `json:"result"`
 			Version  string  `json:"protocol_version"`
 			Cipher   string  `json:"cipher_suite"`
@@ -147,7 +148,7 @@ func (p wPayload) MarshalJSON() ([]byte, error) {
 			SNI      string  `json:"sni_sent"`
 			Alert    *uint16 `json:"alert_code,omitempty"`
 			Duration int64   `json:"duration_ns"`
-		}{p.Kind, p.PeerEntityID, p.Result, p.ProtocolVersion, p.CipherSuite, p.NegotiatedALPN, p.SNISent, p.AlertCode, p.DurationNS})
+		}{p.Kind, p.EndpointEntityID, p.PeerEntityID, p.Result, p.ProtocolVersion, p.CipherSuite, p.NegotiatedALPN, p.SNISent, p.AlertCode, p.DurationNS})
 	case "TLS_PEER_SUMMARY":
 		return marshalOrdered(struct {
 			Kind     string `json:"kind"`
@@ -158,7 +159,7 @@ func (p wPayload) MarshalJSON() ([]byte, error) {
 			After    string `json:"not_after"`
 			SAN      string `json:"san_type"`
 			SANCount uint64 `json:"san_count"`
-		}{p.Kind, p.PeerEntityID, p.CertificateCount, p.LeafSHA256, p.NotBefore, p.NotAfter, p.SANType, p.SANCount})
+		}{p.Kind, optionalStringValue(p.PeerEntityID), p.CertificateCount, p.LeafSHA256, p.NotBefore, p.NotAfter, p.SANType, p.SANCount})
 	case "CERTIFICATE_VERIFICATION_RESULT":
 		return marshalOrdered(struct {
 			Kind     string  `json:"kind"`
@@ -168,7 +169,7 @@ func (p wPayload) MarshalJSON() ([]byte, error) {
 			Trust    string  `json:"trust_source"`
 			Result   string  `json:"result"`
 			Reason   *string `json:"failure_reason,omitempty"`
-		}{p.Kind, p.PeerEntityID, p.VerifiedHostname, p.VerificationTime, p.TrustSource, p.Result, p.FailureReason})
+		}{p.Kind, optionalStringValue(p.PeerEntityID), p.VerifiedHostname, p.VerificationTime, p.TrustSource, p.Result, p.FailureReason})
 	case "HTTP_RESULT":
 		return marshalOrdered(struct {
 			Kind       string   `json:"kind"`

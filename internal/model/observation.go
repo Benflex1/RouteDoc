@@ -53,7 +53,8 @@ type TCPConnectionResult struct {
 	DeadlinePartOfExpectedCondition bool
 }
 type TLSTransportResultPayload struct {
-	PeerEntityID                                          EntityID
+	EndpointEntityID                                      EntityID
+	PeerEntityID                                          *EntityID
 	Result                                                TLSTransportResult
 	ProtocolVersion, CipherSuite, NegotiatedALPN, SNISent string
 	AlertCode                                             *uint16

@@ -230,7 +230,7 @@ type wPayload struct {
 	EndpointEntityID                string   `json:"endpoint_entity_id,omitempty"`
 	DurationNS                      int64    `json:"duration_ns,omitempty"`
 	DeadlinePartOfExpectedCondition bool     `json:"deadline_part_of_expected_condition,omitempty"`
-	PeerEntityID                    string   `json:"peer_entity_id,omitempty"`
+	PeerEntityID                    *string  `json:"peer_entity_id,omitempty"`
 	ProtocolVersion                 string   `json:"protocol_version,omitempty"`
 	CipherSuite                     string   `json:"cipher_suite,omitempty"`
 	NegotiatedALPN                  string   `json:"negotiated_alpn,omitempty"`

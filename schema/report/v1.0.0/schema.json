@@ -2734,6 +2734,9 @@
         "duration_ns": {
           "type": "integer"
         },
+        "endpoint_entity_id": {
+          "$ref": "#/$defs/entityID"
+        },
         "kind": {
           "const": "TLS_TRANSPORT_RESULT"
         },
@@ -2764,21 +2767,26 @@
       },
       "required": [
         "kind",
-        "peer_entity_id",
+        "endpoint_entity_id",
         "result",
+        "protocol_version",
+        "cipher_suite",
+        "negotiated_alpn",
+        "sni_sent",
         "duration_ns"
       ],
       "type": "object",
       "x-routedoc-member-order": [
         "kind",
-        "result",
-        "duration_ns",
+        "endpoint_entity_id",
         "peer_entity_id",
+        "result",
         "protocol_version",
         "cipher_suite",
         "negotiated_alpn",
         "sni_sent",
-        "alert_code"
+        "alert_code",
+        "duration_ns"
       ]
     },
     "payloadUpstreamSelection": {
