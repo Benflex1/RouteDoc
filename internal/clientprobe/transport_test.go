@@ -3,6 +3,7 @@ package clientprobe
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -185,6 +186,87 @@ func TestHTTPReusesExactEstablishedConnection(t *testing.T) {
 	fact := executeHTTP(context.Background(), target, endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 80}, client, nil, time.Now)
 	if fact.resultKind != model.HTTPResponse || fact.statusCode != 401 || requests != 1 || fact.dialCalls != 1 {
 		t.Fatalf("HTTP fact = %#v requests=%d", fact, requests)
+	}
+}
+
+func TestLocalServersObserveImplicitAndExplicitHostAuthority(t *testing.T) {
+	tests := []struct {
+		name, raw, wantHost string
+		secure              bool
+	}{
+		{name: "http implicit", raw: "http://example.test/", wantHost: "example.test"},
+		{name: "http explicit", raw: "http://example.test:8080/", wantHost: "example.test:8080"},
+		{name: "https implicit", raw: "https://example.test/", wantHost: "example.test", secure: true},
+		{name: "https explicit", raw: "https://example.test:8443/", wantHost: "example.test:8443", secure: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			fixture := newTLSFixture(t, "example.test", true)
+			hostSeen := make(chan string, 1)
+			serverErr := make(chan error, 1)
+			go func() {
+				conn, acceptErr := listener.Accept()
+				if acceptErr != nil {
+					serverErr <- acceptErr
+					return
+				}
+				defer conn.Close()
+				var serverConn net.Conn = conn
+				if tc.secure {
+					server := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{fixture.certificate}, NextProtos: []string{"http/1.1"}})
+					if handshakeErr := server.Handshake(); handshakeErr != nil {
+						serverErr <- handshakeErr
+						return
+					}
+					serverConn = server
+					defer server.Close()
+				}
+				req, readErr := http.ReadRequest(bufio.NewReader(serverConn))
+				if readErr != nil {
+					serverErr <- readErr
+					return
+				}
+				hostSeen <- req.Host
+				_, _ = serverConn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"))
+			}()
+
+			target, err := parseTarget(tc.raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			conn, err := net.Dial("tcp", listener.Addr().String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var rawConn net.Conn = conn
+			var tlsConn *tls.Conn
+			if tc.secure {
+				tlsConn = tls.Client(conn, &tls.Config{ServerName: target.persisted.Hostname, InsecureSkipVerify: true})
+				if err := tlsConn.Handshake(); err != nil {
+					t.Fatal(err)
+				}
+				rawConn = nil
+			}
+			fact := executeHTTP(context.Background(), target, endpointKey{address: netip.MustParseAddr("127.0.0.1"), port: target.persisted.EffectivePort}, rawConn, tlsConn, time.Now)
+			if fact.resultKind != model.HTTPResponse {
+				t.Fatalf("HTTP fact = %#v", fact)
+			}
+			select {
+			case err := <-serverErr:
+				t.Fatal(err)
+			case got := <-hostSeen:
+				if got != tc.wantHost {
+					t.Fatalf("server observed Host %q, want %q", got, tc.wantHost)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("timed out waiting for local server")
+			}
+		})
 	}
 }
 

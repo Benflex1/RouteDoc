@@ -2,6 +2,7 @@ package clientprobe
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -42,8 +43,12 @@ func parseTarget(raw string) (requestTarget, error) {
 	if !validTargetHostname(host) {
 		return requestTarget{}, &InputError{Code: "invalid_hostname"}
 	}
+	if address, parseErr := netip.ParseAddr(host); parseErr == nil {
+		host = address.String()
+	}
+	explicitPort := u.Port() != ""
 	port := uint16(0)
-	if u.Port() != "" {
+	if explicitPort {
 		parsed, err := strconv.ParseUint(u.Port(), 10, 16)
 		if err != nil || parsed == 0 {
 			return requestTarget{}, &InputError{Code: "invalid_port"}
@@ -66,7 +71,7 @@ func parseTarget(raw string) (requestTarget, error) {
 	u.Fragment = ""
 	u.RawFragment = ""
 	u.Scheme = scheme
-	u.Host = formatRequestHost(host, port, u.Hostname())
+	u.Host = formatRequestAuthority(host, port, explicitPort)
 	return requestTarget{
 		requestURL: u,
 		persisted: model.Target{
@@ -76,9 +81,12 @@ func parseTarget(raw string) (requestTarget, error) {
 	}, nil
 }
 
-func formatRequestHost(host string, port uint16, original string) string {
-	if strings.Contains(original, ":") {
-		return fmt.Sprintf("[%s]:%d", host, port)
+func formatRequestAuthority(host string, port uint16, explicitPort bool) string {
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if !explicitPort {
+		return host
 	}
 	return fmt.Sprintf("%s:%d", host, port)
 }
@@ -104,6 +112,9 @@ func summarizePath(path, query string) model.PathSummary {
 }
 
 func validTargetHostname(host string) bool {
+	if address, err := netip.ParseAddr(host); err == nil {
+		return address.String() == host
+	}
 	if host == "" || len(host) > 253 || strings.ToLower(host) != host {
 		return false
 	}

@@ -54,6 +54,34 @@ func TestParseTargetDefaultsAndNormalizes(t *testing.T) {
 	}
 }
 
+func TestParseTargetPreservesRequestAuthoritySeparatelyFromEffectivePort(t *testing.T) {
+	tests := []struct {
+		name, raw, authority string
+		port                 uint16
+	}{
+		{name: "http implicit", raw: "http://example.test/", authority: "example.test", port: 80},
+		{name: "https implicit", raw: "https://example.test/", authority: "example.test", port: 443},
+		{name: "http explicit", raw: "http://example.test:8080/", authority: "example.test:8080", port: 8080},
+		{name: "https explicit", raw: "https://example.test:8443/", authority: "example.test:8443", port: 8443},
+		{name: "ipv6 implicit", raw: "http://[2001:db8::1]/", authority: "[2001:db8::1]", port: 80},
+		{name: "ipv6 explicit", raw: "https://[2001:db8::1]:8443/", authority: "[2001:db8::1]:8443", port: 8443},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseTarget(tc.raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.requestURL.Host != tc.authority {
+				t.Fatalf("request authority = %q, want %q", got.requestURL.Host, tc.authority)
+			}
+			if got.persisted.EffectivePort != tc.port {
+				t.Fatalf("effective port = %d, want %d", got.persisted.EffectivePort, tc.port)
+			}
+		})
+	}
+}
+
 func TestParseTargetRejectsUnsafeInputWithoutEcho(t *testing.T) {
 	tests := []struct {
 		name, raw, code string
