@@ -78,6 +78,13 @@ func TestClientReportExplainsPartialVisibility(t *testing.T) {
 	if !strings.Contains(concise.String(), "Partial visibility: additional resolved addresses were not retained/probed.") {
 		t.Fatalf("partial visibility was not explained: %q", concise.String())
 	}
+	var verbose bytes.Buffer
+	if err := Report(&verbose, v, Options{Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(verbose.String(), "Partial visibility: additional resolved addresses were not retained/probed.") {
+		t.Fatalf("verbose partial visibility was not explained: %q", verbose.String())
+	}
 }
 func emptyRenderRun() model.EvaluatedRun {
 	r := model.EvidenceRun{ReportSchemaVersion: model.SchemaVersion{Major: 1, Minor: 0, Patch: 0}, Producer: model.Producer{Name: "routedoc", Version: "0", Build: "test"}, RunID: "run-000001", Target: model.Target{Scheme: "https", Hostname: "example.test", EffectivePort: 443, Path: model.PathSummary{Present: true, IsRoot: false, SegmentCount: 2, TrailingSlash: true, QueryPresent: true}}, Goal: model.Goal{Kind: model.GoalHTTPResponse}, RequestedScope: model.RequestedScope{Kind: model.ScopeClientOnly}, StartedAt: timeForRender(), FinishedAt: timeForRender(), VantagePoints: []model.VantagePoint{}, Capabilities: []model.Capability{}, OperatorAssertions: []model.OperatorAssertion{}, Entities: []model.Entity{}, ServicePath: model.ServicePath{Nodes: []model.PathNode{}, Edges: []model.PathEdge{}, Branches: []model.Branch{}}, CheckDefinitions: []model.CheckDefinition{}, CheckExecutions: []model.CheckExecution{}, Observations: []model.Observation{}, VisibilityAssessments: []model.VisibilityAssessment{}, Limitations: []model.Limitation{}}
