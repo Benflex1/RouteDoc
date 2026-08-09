@@ -90,6 +90,14 @@ func reportClientConcise(w io.Writer, v model.ValidatedEvaluatedRun) error {
 		if err := writeLine(w, fmt.Sprintf("Limitations: %d", len(r.Evidence.Limitations))); err != nil {
 			return err
 		}
+		for _, limitation := range r.Evidence.Limitations {
+			if limitation.Code == model.LimitationPartialVisibility {
+				if err := writeLine(w, "Partial visibility: additional resolved addresses were not retained/probed."); err != nil {
+					return err
+				}
+				break
+			}
+		}
 	}
 	return nil
 }
