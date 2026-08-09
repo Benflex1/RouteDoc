@@ -16,6 +16,7 @@ import (
 
 	"routedoc/internal/model"
 	"routedoc/internal/render"
+	"routedoc/internal/rules"
 	"routedoc/internal/schema/v1"
 )
 
@@ -106,6 +107,51 @@ func TestStatusIndeterminateForDirectFailureAndCap(t *testing.T) {
 	}
 	if Status(v) != StatusIndeterminate {
 		t.Fatalf("status = %v, findings = %#v", Status(v), v.Value().Findings)
+	}
+}
+
+func TestEquivalentNormalAndPinnedBlockersKeepObservationsButSelectOnePrimary(t *testing.T) {
+	addresses := []netip.Addr{netip.MustParseAddr("192.0.2.1"), netip.MustParseAddr("192.0.2.2")}
+	now := time.Date(2026, 8, 10, 10, 0, 0, 0, time.UTC)
+	facts := topologyFacts(addresses)
+	facts.started, facts.finished = now, now.Add(time.Second)
+	endpoint := endpointKey{address: addresses[0], port: 443}
+	facts.tcp = []tcpFact{
+		{mode: modeNormal, endpoint: endpoint, result: model.TCPRefused, exact: true, finished: now},
+		{mode: modePinned, endpoint: endpoint, result: model.TCPRefused, exact: true, finished: now.Add(time.Nanosecond)},
+	}
+	evidence := assembleEvidence(facts)
+	validated, validationIssues := model.CanonicalizeAndValidateEvidenceRun(evidence)
+	if len(validationIssues) != 0 {
+		t.Fatal(validationIssues)
+	}
+	evaluated, evaluationIssues := rules.NewEvaluator(rules.DefaultRegistry()).Evaluate(validated, facts.finished)
+	if len(evaluationIssues) != 0 {
+		t.Fatal(evaluationIssues)
+	}
+	refusedObservations := 0
+	for _, observation := range evaluated.Value().Evidence.Observations {
+		if observation.Payload.TCP != nil && observation.Payload.TCP.Result == model.TCPRefused {
+			refusedObservations++
+		}
+	}
+	if refusedObservations != 2 {
+		t.Fatalf("refused observations = %d, want both direct attempts", refusedObservations)
+	}
+	primary, additional := 0, 0
+	for _, finding := range evaluated.Value().Findings {
+		if finding.TitleCode != model.TitleTCPConnectionRefused {
+			continue
+		}
+		switch finding.Selection {
+		case model.SelectionBranchPrimary:
+			primary++
+		case model.SelectionAdditional:
+			additional++
+		}
+	}
+	if primary != 1 || primary+additional < 1 {
+		t.Fatalf("refused finding selections = %d primary, %d additional", primary, additional)
 	}
 }
 
