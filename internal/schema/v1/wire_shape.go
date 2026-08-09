@@ -103,7 +103,7 @@ var wireUnionShape = map[string]map[string]map[string]bool{
 	"/observations/*/payload": {
 		"SYSTEM_RESOLUTION_RESULT":        {"kind": true, "hostname_entity_id": true, "address_entity_id": true, "address_family": true, "result": true},
 		"TCP_CONNECTION_RESULT":           {"kind": true, "endpoint_entity_id": true, "result": true, "duration_ns": true, "deadline_part_of_expected_condition": true},
-		"TLS_TRANSPORT_RESULT":            {"kind": true, "peer_entity_id": true, "result": true, "protocol_version": true, "cipher_suite": true, "negotiated_alpn": true, "sni_sent": true, "alert_code": true, "duration_ns": true},
+		"TLS_TRANSPORT_RESULT":            {"kind": true, "endpoint_entity_id": true, "peer_entity_id": true, "result": true, "protocol_version": true, "cipher_suite": true, "negotiated_alpn": true, "sni_sent": true, "alert_code": true, "duration_ns": true},
 		"TLS_PEER_SUMMARY":                {"kind": true, "peer_entity_id": true, "certificate_count": true, "leaf_sha256": true, "not_before": true, "not_after": true, "san_type": true, "san_count": true},
 		"CERTIFICATE_VERIFICATION_RESULT": {"kind": true, "peer_entity_id": true, "verified_hostname": true, "verification_time": true, "trust_source": true, "result": true, "failure_reason": true},
 		"HTTP_RESULT":                     {"kind": true, "exchange_entity_id": true, "result_kind": true, "status_code": true, "redirect_target_entity_id": true, "redirect_target": true},
@@ -213,7 +213,7 @@ var wireUnionRequired = map[string]map[string][]string{
 	"/observations/*/payload": {
 		"SYSTEM_RESOLUTION_RESULT":        {"kind", "hostname_entity_id", "address_family", "result"},
 		"TCP_CONNECTION_RESULT":           {"kind", "endpoint_entity_id", "result", "duration_ns", "deadline_part_of_expected_condition"},
-		"TLS_TRANSPORT_RESULT":            {"kind", "peer_entity_id", "result", "duration_ns"},
+		"TLS_TRANSPORT_RESULT":            {"kind", "endpoint_entity_id", "result", "protocol_version", "cipher_suite", "negotiated_alpn", "sni_sent", "duration_ns"},
 		"TLS_PEER_SUMMARY":                {"kind", "peer_entity_id", "certificate_count", "leaf_sha256", "not_before", "not_after", "san_type", "san_count"},
 		"CERTIFICATE_VERIFICATION_RESULT": {"kind", "peer_entity_id", "verified_hostname", "verification_time", "trust_source", "result"},
 		"HTTP_RESULT":                     {"kind", "exchange_entity_id", "result_kind", "status_code"},

@@ -351,7 +351,11 @@ func payloadWire(x model.ObservationPayload) wPayload {
 	case model.ObservationTLSTransport:
 		if x.TLSTransport != nil {
 			v := x.TLSTransport
-			w.PeerEntityID = string(v.PeerEntityID)
+			w.EndpointEntityID = string(v.EndpointEntityID)
+			if v.PeerEntityID != nil {
+				x := string(*v.PeerEntityID)
+				w.PeerEntityID = &x
+			}
 			w.Result = string(v.Result)
 			w.ProtocolVersion = v.ProtocolVersion
 			w.CipherSuite = v.CipherSuite
@@ -363,7 +367,8 @@ func payloadWire(x model.ObservationPayload) wPayload {
 	case model.ObservationTLSPeer:
 		if x.TLSPeer != nil {
 			v := x.TLSPeer
-			w.PeerEntityID = string(v.PeerEntityID)
+			x := string(v.PeerEntityID)
+			w.PeerEntityID = &x
 			w.CertificateCount = v.CertificateCount
 			w.LeafSHA256 = v.LeafSHA256
 			w.NotBefore = timeWire(v.NotBefore)
@@ -374,7 +379,8 @@ func payloadWire(x model.ObservationPayload) wPayload {
 	case model.ObservationCertificateVerification:
 		if x.CertificateVerification != nil {
 			v := x.CertificateVerification
-			w.PeerEntityID = string(v.PeerEntityID)
+			x := string(v.PeerEntityID)
+			w.PeerEntityID = &x
 			w.VerifiedHostname = v.VerifiedHostname
 			w.VerificationTime = timeWire(v.VerificationTime)
 			w.TrustSource = string(v.TrustSource)

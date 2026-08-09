@@ -324,11 +324,15 @@ func payloadModel(w wPayload, is *model.ValidationIssues) model.ObservationPaylo
 	case string(model.ObservationTCPConnection):
 		p.TCP = &model.TCPConnectionResult{EndpointEntityID: model.EntityID(w.EndpointEntityID), Result: model.TCPResult(w.Result), DurationNS: w.DurationNS, DeadlinePartOfExpectedCondition: w.DeadlinePartOfExpectedCondition}
 	case string(model.ObservationTLSTransport):
-		p.TLSTransport = &model.TLSTransportResultPayload{PeerEntityID: model.EntityID(w.PeerEntityID), Result: model.TLSTransportResult(w.Result), ProtocolVersion: w.ProtocolVersion, CipherSuite: w.CipherSuite, NegotiatedALPN: w.NegotiatedALPN, SNISent: w.SNISent, AlertCode: w.AlertCode, DurationNS: w.DurationNS}
+		p.TLSTransport = &model.TLSTransportResultPayload{EndpointEntityID: model.EntityID(w.EndpointEntityID), Result: model.TLSTransportResult(w.Result), ProtocolVersion: w.ProtocolVersion, CipherSuite: w.CipherSuite, NegotiatedALPN: w.NegotiatedALPN, SNISent: w.SNISent, AlertCode: w.AlertCode, DurationNS: w.DurationNS}
+		if w.PeerEntityID != nil {
+			x := model.EntityID(*w.PeerEntityID)
+			p.TLSTransport.PeerEntityID = &x
+		}
 	case string(model.ObservationTLSPeer):
-		p.TLSPeer = &model.TLSPeerSummary{PeerEntityID: model.EntityID(w.PeerEntityID), CertificateCount: w.CertificateCount, LeafSHA256: w.LeafSHA256, NotBefore: parseTime(w.NotBefore, "/observations/payload/not_before", is), NotAfter: parseTime(w.NotAfter, "/observations/payload/not_after", is), SANType: model.SANType(w.SANType), SANCount: w.SANCount}
+		p.TLSPeer = &model.TLSPeerSummary{PeerEntityID: model.EntityID(optionalStringValue(w.PeerEntityID)), CertificateCount: w.CertificateCount, LeafSHA256: w.LeafSHA256, NotBefore: parseTime(w.NotBefore, "/observations/payload/not_before", is), NotAfter: parseTime(w.NotAfter, "/observations/payload/not_after", is), SANType: model.SANType(w.SANType), SANCount: w.SANCount}
 	case string(model.ObservationCertificateVerification):
-		p.CertificateVerification = &model.CertificateVerificationResultPayload{PeerEntityID: model.EntityID(w.PeerEntityID), VerifiedHostname: w.VerifiedHostname, VerificationTime: parseTime(w.VerificationTime, "/observations/payload/verification_time", is), TrustSource: model.TrustSource(w.TrustSource), Result: model.CertificateVerificationResult(w.Result)}
+		p.CertificateVerification = &model.CertificateVerificationResultPayload{PeerEntityID: model.EntityID(optionalStringValue(w.PeerEntityID)), VerifiedHostname: w.VerifiedHostname, VerificationTime: parseTime(w.VerificationTime, "/observations/payload/verification_time", is), TrustSource: model.TrustSource(w.TrustSource), Result: model.CertificateVerificationResult(w.Result)}
 		if w.FailureReason != nil {
 			x := model.CertificateVerificationResult(*w.FailureReason)
 			p.CertificateVerification.FailureReason = &x
@@ -388,6 +392,14 @@ func payloadModel(w wPayload, is *model.ValidationIssues) model.ObservationPaylo
 	}
 	return p
 }
+
+func optionalStringValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+
 func visibilityModel(w wVisibility, is *model.ValidationIssues) model.VisibilityAssessment {
 	v := model.VisibilityAssessment{VisibilityID: model.VisibilityID(w.VisibilityID), SubjectKind: model.VisibilitySubjectKind(w.SubjectKind), VantageID: model.VantageID(w.VantageID), Scope: model.VisibilityScope{Kind: w.Scope.Kind, Listener: &model.ListenerVisibilityScope{NamespaceEntityID: model.EntityID(w.Scope.NamespaceEntityID), Protocol: model.Transport(w.Scope.Protocol), AddressFamily: model.AddressFamily(w.Scope.AddressFamily), BindSemantics: model.BindSemantics(w.Scope.BindSemantics), PortStart: w.Scope.PortStart, PortEnd: w.Scope.PortEnd, ProcessOwnershipRequired: w.Scope.ProcessOwnershipRequired}}, Level: model.VisibilityLevel(w.Level), BasisObservationIDs: make([]model.ObservationID, len(w.BasisObservationIDs)), Limitations: make([]model.Limitation, len(w.Limitations)), AssessedAt: parseTime(w.AssessedAt, "/visibility_assessments/assessed_at", is)}
 	for i, x := range w.BasisObservationIDs {

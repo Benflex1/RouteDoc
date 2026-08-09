@@ -176,7 +176,7 @@ func ValidateEvidenceRun(r EvidenceRun) (ValidatedEvidenceRun, ValidationIssues)
 			add(CodeDuplicateID, p+"/observation_id", "duplicate observation ID")
 		}
 		observationIDs[o.ObservationID] = true
-		validateObservation(&is, o, p, entityIDs, vantageIDs)
+		validateObservation(&is, o, p, entityValues, vantageIDs)
 		if o.Kind == ObservationListenerInventoryResult && o.Payload.ListenerInventoryResult != nil {
 			result := o.Payload.ListenerInventoryResult
 			if entity, ok := entityValues[result.NamespaceEntityID]; !ok || entity.Kind != EntityNetworkNamespace || entity.Identity.Namespace == nil {

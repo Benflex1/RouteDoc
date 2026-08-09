@@ -57,6 +57,27 @@ func TestListenerInventoryResultIsClosedModelCase(t *testing.T) {
 	}
 }
 
+func TestTLSTransportPayloadHasRequiredEndpointAndOptionalPeer(t *testing.T) {
+	typ := reflect.TypeOf(TLSTransportResultPayload{})
+	want := []string{"EndpointEntityID", "PeerEntityID", "Result", "ProtocolVersion", "CipherSuite", "NegotiatedALPN", "SNISent", "AlertCode", "DurationNS"}
+	if typ.NumField() != len(want) {
+		t.Fatalf("TLS transport payload has %d fields, want %d", typ.NumField(), len(want))
+	}
+	for i, name := range want {
+		if typ.Field(i).Name != name {
+			t.Fatalf("TLS transport field %d is %s, want %s", i, typ.Field(i).Name, name)
+		}
+	}
+	endpoint, ok := typ.FieldByName("EndpointEntityID")
+	if !ok || endpoint.Type != reflect.TypeOf(EntityID("")) {
+		t.Fatal("endpoint reference is not required EntityID")
+	}
+	peer, ok := typ.FieldByName("PeerEntityID")
+	if !ok || peer.Type != reflect.TypeOf((*EntityID)(nil)) {
+		t.Fatal("peer reference is not optional *EntityID")
+	}
+}
+
 func TestEvidenceRefConstructors(t *testing.T) {
 	r := ObservationRef(ObservationID("observation-000001"))
 	if r.Kind != EvidenceKindObservation || r.ObservationID == nil || r.ClaimID != nil {

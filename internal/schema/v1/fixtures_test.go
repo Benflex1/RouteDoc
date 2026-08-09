@@ -15,7 +15,7 @@ import (
 	"routedoc/internal/rules"
 )
 
-var fixtureCases = []string{"valid-multibranch-no-global", "ipv4-success-ipv6-refused-partial", "tls-hostname-mismatch-http-skipped", "caddy-active-over-configured-intent", "upstream-refused-wrong-vantage", "listener-absent-complete-scope", "listener-absent-exact-zero-scope", "listener-absent-partial-scope", "two-proxy-upstreams-no-global", "operator-asserted-expected-path", "multiclaim-acyclic", "claim-forward-invalid", "claim-cycle-invalid", "provenance-missing-invalid", "provenance-recoverable-stored", "reevaluation-replacement-before", "reevaluation-replacement-after", "path-summary-only", "sensitive-derived-only", "exact-unknown-field-invalid", "newer-minor-ignored-fields", "newer-patch-known-readonly", "unknown-enum-invalid", "unknown-union-invalid", "missing-required-field-invalid", "unsupported-major-invalid"}
+var fixtureCases = []string{"valid-multibranch-no-global", "ipv4-success-ipv6-refused-partial", "tls-hostname-mismatch-http-skipped", "tls-transport-endpoint-adversarial", "caddy-active-over-configured-intent", "upstream-refused-wrong-vantage", "listener-absent-complete-scope", "listener-absent-exact-zero-scope", "listener-absent-partial-scope", "two-proxy-upstreams-no-global", "operator-asserted-expected-path", "multiclaim-acyclic", "claim-forward-invalid", "claim-cycle-invalid", "provenance-missing-invalid", "provenance-recoverable-stored", "reevaluation-replacement-before", "reevaluation-replacement-after", "path-summary-only", "sensitive-derived-only", "exact-unknown-field-invalid", "newer-minor-ignored-fields", "newer-patch-known-readonly", "unknown-enum-invalid", "unknown-union-invalid", "missing-required-field-invalid", "unsupported-major-invalid"}
 
 type fixtureIssueJSON struct {
 	Code    string `json:"code"`
@@ -165,6 +165,22 @@ func TestFixtureSemanticBoundaries(t *testing.T) {
 	for _, o := range tls.Evidence.Observations {
 		if o.Kind == model.ObservationHTTP {
 			t.Fatal("TLS mismatch fixture must not invent an HTTP result")
+		}
+	}
+	transport := read("tls-transport-endpoint-adversarial")
+	if len(transport.Evidence.Observations) != 5 {
+		t.Fatalf("TLS transport adversarial fixture observations: %d", len(transport.Evidence.Observations))
+	}
+	for i, observation := range transport.Evidence.Observations {
+		if observation.Kind != model.ObservationTLSTransport || observation.Payload.TLSTransport == nil || observation.Payload.TLSTransport.EndpointEntityID != model.EntityID("entity-endpoint") {
+			t.Fatalf("transport observation %d does not name exact endpoint: %#v", i, observation)
+		}
+		peer := observation.Payload.TLSTransport.PeerEntityID
+		if i < 3 && peer != nil {
+			t.Fatalf("pre-certificate transport observation %d fabricated peer %q", i, *peer)
+		}
+		if i >= 3 && (peer == nil || *peer != model.EntityID("entity-peer")) {
+			t.Fatalf("certificate-derived transport observation %d lost peer attribution: %#v", i, observation.Payload.TLSTransport)
 		}
 	}
 	if tcp := read("upstream-refused-wrong-vantage"); len(tcp.Findings) != 1 || tcp.Findings[0].RuleID != model.RuleID("tcp.connection_refused/v1") {

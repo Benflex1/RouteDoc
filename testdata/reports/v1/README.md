@@ -8,7 +8,8 @@ credentials, Caddy source, Docker environment, or certificate material.
 |---|---|
 | `valid-multibranch-no-global` | valid report shape; no unjustified global |
 | `ipv4-success-ipv6-refused-partial` | dual-family branch separation |
-| `tls-hostname-mismatch-http-skipped` | TLS transport/peer/verification and skipped HTTP |
+| `tls-hostname-mismatch-http-skipped` | TLS peer/verification and skipped HTTP |
+| `tls-transport-endpoint-adversarial` | endpoint-attributed timeout/failure and certificate-derived peer cases |
 | `caddy-active-over-configured-intent` | active/configured provenance distinction |
 | `upstream-refused-wrong-vantage` | exact-vantage refusal |
 | `listener-absent-complete-scope` | complete listener visibility |
