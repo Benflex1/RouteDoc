@@ -28,7 +28,7 @@ func normalizeTCPError(err error) (model.TCPResult, string) {
 }
 
 func normalizeTLSError(err error) (model.TLSTransportResult, string) {
-	if isTimeout(err) {
+	if errors.Is(err, context.DeadlineExceeded) || isTimeout(err) {
 		return model.TLSTransportTimedOut, "tls_timeout"
 	}
 	return model.TLSTransportFailed, "tls_failed"

@@ -215,6 +215,59 @@ func TestTLSPreCertificateFailureHasNoPeer(t *testing.T) {
 	}
 }
 
+func TestTLSFailureAcceptanceHasNoPeerOrHTTP(t *testing.T) {
+	tests := []struct {
+		name  string
+		serve func(net.Conn)
+		want  model.TLSTransportResult
+	}{
+		{name: "peer reset", serve: func(conn net.Conn) { _ = conn.Close() }, want: model.TLSTransportFailed},
+		{name: "plaintext server", serve: func(conn net.Conn) {
+			buf := make([]byte, 4096)
+			_, _ = conn.Read(buf)
+			_, _ = conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+			_ = conn.Close()
+		}, want: model.TLSTransportFailed},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client, server := net.Pipe()
+			go tc.serve(server)
+			fact := executeTLS(context.Background(), endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}, "example.test", client, nil, model.TrustSystem, time.Now)
+			if fact.result != tc.want || fact.peer != nil || fact.tlsConn != nil {
+				t.Fatalf("TLS failure fact = %#v", fact)
+			}
+			target, err := parseTarget("https://example.test/")
+			if err != nil {
+				t.Fatal(err)
+			}
+			httpFact := executeHTTP(context.Background(), target, fact.endpoint, nil, fact.tlsConn, time.Now)
+			if httpFact.completed || httpFact.requestCalls != 0 || httpFact.reason != "tls_peer_unverified" {
+				t.Fatalf("HTTP was not suppressed after TLS failure: %#v", httpFact)
+			}
+		})
+	}
+}
+
+func TestTLSHandshakeTimeoutAcceptanceIsNormalized(t *testing.T) {
+	client, server := net.Pipe()
+	hold := make(chan struct{})
+	go func() {
+		defer server.Close()
+		buf := make([]byte, 4096)
+		_, _ = server.Read(buf)
+		<-hold
+	}()
+	parent, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	fact := executeTLS(parent, endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}, "example.test", client, nil, model.TrustSystem, time.Now)
+	if fact.result != model.TLSTransportTimedOut || fact.reason != "tls_timeout" || fact.peer != nil || fact.tlsConn != nil {
+		t.Fatalf("TLS timeout fact = %#v", fact)
+	}
+	close(hold)
+	_ = server.Close()
+}
+
 func TestTLSVerificationSeparatesHostnameAndTrust(t *testing.T) {
 	fixture := newTLSFixture(t, "other.test", true)
 	client, server := net.Pipe()

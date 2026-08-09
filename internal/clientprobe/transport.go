@@ -150,8 +150,22 @@ func executeTLS(parent context.Context, endpoint endpointKey, hostname string, c
 		return fact
 	}
 	ctx, cancel := context.WithTimeout(parent, tlsTimeout)
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+		defer conn.SetDeadline(time.Time{})
+	}
 	tlsConn := tls.Client(conn, &tls.Config{ServerName: hostname, InsecureSkipVerify: true, NextProtos: []string{"http/1.1"}}) // explicit verification follows below
+	handshakeDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-handshakeDone:
+		}
+	}()
 	err := tlsConn.HandshakeContext(ctx)
+	deadlineExceeded := errors.Is(ctx.Err(), context.DeadlineExceeded)
+	close(handshakeDone)
 	cancel()
 	finished := now().UTC()
 	if finished.Before(started) {
@@ -160,7 +174,11 @@ func executeTLS(parent context.Context, endpoint endpointKey, hostname string, c
 	fact.durationNS = finished.Sub(started).Nanoseconds()
 	state := tlsConn.ConnectionState()
 	if err != nil {
-		_, fact.reason = normalizeTLSError(err)
+		if deadlineExceeded {
+			fact.result, fact.reason = model.TLSTransportTimedOut, "tls_timeout"
+		} else {
+			fact.result, fact.reason = normalizeTLSError(err)
+		}
 	} else {
 		fact.result = model.TLSTransportCompleted
 		fact.reason = ""
@@ -193,7 +211,7 @@ func executeTLS(parent context.Context, endpoint endpointKey, hostname string, c
 			return fact
 		}
 	}
-	_ = tlsConn.Close()
+	_ = conn.Close()
 	return fact
 }
 
