@@ -171,6 +171,15 @@ func mergeEndpointPlans(f runFacts) []endpointPlan {
 	}
 	if f.normal != nil && f.normal.exact && !seen[f.normal.endpoint] {
 		plans = append(plans, endpointPlan{key: f.normal.endpoint})
+		seen[f.normal.endpoint] = true
+	}
+	if f.normal == nil {
+		for _, fact := range f.tcp {
+			if fact.mode == modeNormal && fact.exact && !seen[fact.endpoint] {
+				plans = append(plans, endpointPlan{key: fact.endpoint})
+				seen[fact.endpoint] = true
+			}
+		}
 	}
 	sort.Slice(plans, func(i, j int) bool { return endpointSort(plans[i].key, plans[j].key) })
 	return plans
