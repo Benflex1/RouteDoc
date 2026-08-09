@@ -1,10 +1,14 @@
 package clientprobe
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"net/http"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -163,5 +167,72 @@ func TestTLSAssemblyPassesArchitecture13Validation(t *testing.T) {
 	}
 	if fact.tlsConn != nil {
 		_ = fact.tlsConn.Close()
+	}
+}
+
+func TestHTTPReusesExactEstablishedConnection(t *testing.T) {
+	client, server := net.Pipe()
+	var requests int
+	go func() {
+		defer server.Close()
+		req, err := http.ReadRequest(bufio.NewReader(server))
+		if err == nil && req.Host == "example.test:80" && req.Header.Get("User-Agent") == "RouteDoctor/1" {
+			requests++
+		}
+		_, _ = server.Write([]byte("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"))
+	}()
+	target := requestTarget{requestURL: &url.URL{Scheme: "http", Host: "example.test:80", Path: "/"}, persisted: model.Target{Scheme: "http", Hostname: "example.test", EffectivePort: 80, Path: model.PathSummary{Present: true, IsRoot: true}}}
+	fact := executeHTTP(context.Background(), target, endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 80}, client, nil, time.Now)
+	if fact.resultKind != model.HTTPResponse || fact.statusCode != 401 || requests != 1 || fact.dialCalls != 1 {
+		t.Fatalf("HTTP fact = %#v requests=%d", fact, requests)
+	}
+}
+
+func TestRedirectIsObservedButNotFollowed(t *testing.T) {
+	client, server := net.Pipe()
+	go func() {
+		defer server.Close()
+		_, _ = http.ReadRequest(bufio.NewReader(server))
+		_, _ = server.Write([]byte("HTTP/1.1 302 Found\r\nLocation: /private/path?token=secret\r\nContent-Length: 0\r\n\r\n"))
+	}()
+	target := requestTarget{requestURL: &url.URL{Scheme: "http", Host: "example.test:80", Path: "/"}, persisted: model.Target{Scheme: "http", Hostname: "example.test", EffectivePort: 80, Path: model.PathSummary{Present: true, IsRoot: true}}}
+	fact := executeHTTP(context.Background(), target, endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 80}, client, nil, time.Now)
+	if fact.resultKind != model.HTTPRedirect || fact.redirectTarget == nil || fact.redirectTarget.Path.QueryPresent != true {
+		t.Fatalf("redirect fact = %#v", fact)
+	}
+	if strings.Contains(fmt.Sprint(fact), "private") || strings.Contains(fmt.Sprint(fact), "secret") {
+		t.Fatal("redirect fact retained raw URL data")
+	}
+}
+
+func TestHTTPSVerificationFailureSuppressesHTTP(t *testing.T) {
+	client, server := net.Pipe()
+	_ = server.Close()
+	target := requestTarget{requestURL: &url.URL{Scheme: "https", Host: "example.test:443", Path: "/"}, persisted: model.Target{Scheme: "https", Hostname: "example.test", EffectivePort: 443, Path: model.PathSummary{Present: true, IsRoot: true}}}
+	fact := executeHTTP(context.Background(), target, endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}, client, nil, time.Now)
+	if fact.dialCalls != 0 || fact.reason != "tls_peer_unverified" || fact.completed {
+		t.Fatalf("suppressed HTTPS fact = %#v", fact)
+	}
+}
+
+func TestHTTPAssemblyPassesEvidenceValidation(t *testing.T) {
+	client, server := net.Pipe()
+	go func() {
+		defer server.Close()
+		_, _ = http.ReadRequest(bufio.NewReader(server))
+		_, _ = server.Write([]byte("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"))
+	}()
+	facts := topologyFacts([]netip.Addr{netip.MustParseAddr("192.0.2.1")})
+	facts.target.persisted.Scheme = "http"
+	facts.target.persisted.EffectivePort = 80
+	facts.target.requestURL = &url.URL{Scheme: "http", Host: "example.test:80", Path: "/"}
+	endpoint := endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 80}
+	facts.endpoints = planEndpoints([]netip.Addr{endpoint.address}, endpoint.port)
+	facts.tcp = []tcpFact{{mode: modePinned, endpoint: endpoint, result: model.TCPAccepted, exact: true, finished: time.Now().UTC()}}
+	facts.http = []httpFact{executeHTTP(context.Background(), facts.target, endpoint, client, nil, time.Now)}
+	facts.http[0].mode = modePinned
+	r := assembleEvidence(facts)
+	if _, issues := model.ValidateEvidenceRun(r); len(issues) != 0 {
+		t.Fatalf("HTTP evidence is invalid: %v", issues)
 	}
 }

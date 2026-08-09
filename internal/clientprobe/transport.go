@@ -6,10 +6,15 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"errors"
+	"io"
 	"net"
+	"net/http"
 	"net/netip"
+	"net/url"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"routedoc/internal/model"
@@ -218,4 +223,117 @@ func summarizePeer(leaf *x509.Certificate, count uint64) *peerFact {
 		peer.sanType, peer.sanCount = model.SANOther, uint64(len(leaf.EmailAddresses)+len(leaf.URIs))
 	}
 	return peer
+}
+
+type httpFact struct {
+	mode           attemptMode
+	endpoint       endpointKey
+	completed      bool
+	resultKind     model.HTTPResultKind
+	statusCode     uint16
+	reason         string
+	durationNS     int64
+	redirectTarget *model.Target
+	dialCalls      int
+	requestCalls   int
+}
+
+func executeHTTP(parent context.Context, target requestTarget, endpoint endpointKey, rawConn net.Conn, tlsConn *tls.Conn, now func() time.Time) httpFact {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if now == nil {
+		now = time.Now
+	}
+	started := now().UTC()
+	fact := httpFact{endpoint: endpoint, reason: "http_failed"}
+	if target.persisted.Scheme == "https" && tlsConn == nil {
+		fact.reason = "tls_peer_unverified"
+		return fact
+	}
+	if target.persisted.Scheme == "http" && rawConn == nil {
+		fact.reason = "connection_unavailable"
+		return fact
+	}
+	transport := &http.Transport{Proxy: nil, DisableCompression: true, DisableKeepAlives: true, MaxResponseHeaderBytes: maxResponseHeaderBytes}
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	transport.Protocols = protocols
+	var mu sync.Mutex
+	used := false
+	dialCalls := 0
+	useConnection := func(conn net.Conn) func(context.Context, string, string) (net.Conn, error) {
+		return func(_ context.Context, _, _ string) (net.Conn, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			dialCalls++
+			if used {
+				return nil, errors.New("routedoc one-use connection exhausted")
+			}
+			used = true
+			return conn, nil
+		}
+	}
+	if target.persisted.Scheme == "http" {
+		transport.DialContext = useConnection(rawConn)
+	} else {
+		transport.DialTLSContext = func(_ context.Context, _, _ string) (net.Conn, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			dialCalls++
+			if used {
+				return nil, errors.New("routedoc one-use TLS connection exhausted")
+			}
+			used = true
+			return tlsConn, nil
+		}
+		transport.DialContext = func(context.Context, string, string) (net.Conn, error) {
+			return nil, errors.New("routedoc unexpected HTTPS dial")
+		}
+	}
+	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	ctx, cancel := context.WithTimeout(parent, httpTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.requestURL.String(), nil)
+	if err != nil {
+		fact.reason = "http_failed"
+		return fact
+	}
+	req.Header.Set("User-Agent", "RouteDoctor/1")
+	fact.requestCalls++
+	resp, err := client.Do(req)
+	mu.Lock()
+	fact.dialCalls = dialCalls
+	mu.Unlock()
+	if err != nil {
+		fact.reason = normalizeHTTPError(err)
+		transport.CloseIdleConnections()
+		return fact
+	}
+	fact.completed = true
+	fact.resultKind = model.HTTPResponse
+	if resp.StatusCode >= 100 && resp.StatusCode <= 999 {
+		fact.statusCode = uint16(resp.StatusCode)
+	}
+	if resp.StatusCode >= 300 && resp.StatusCode <= 399 {
+		if location := resp.Header.Get("Location"); location != "" {
+			if locationURL, parseErr := url.Parse(location); parseErr == nil {
+				resolved := resp.Request.URL.ResolveReference(locationURL)
+				if parsedLocation, targetErr := parseTarget(resolved.String()); targetErr == nil {
+					fact.resultKind = model.HTTPRedirect
+					fact.redirectTarget = &parsedLocation.persisted
+				}
+			}
+		}
+	}
+	_, _ = io.CopyN(io.Discard, resp.Body, maxResponseBodyPrefix)
+	_ = resp.Body.Close()
+	transport.CloseIdleConnections()
+	finished := now().UTC()
+	if finished.Before(started) {
+		finished = started
+	}
+	fact.durationNS = finished.Sub(started).Nanoseconds()
+	fact.reason = ""
+	return fact
 }

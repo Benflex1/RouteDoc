@@ -14,6 +14,12 @@ type idAllocator struct {
 	entity, edge, branch, check, execution, observation, limitation int
 }
 
+type httpAssemblyFact struct {
+	fact       httpFact
+	exchangeID model.EntityID
+	redirectID *model.EntityID
+}
+
 func (a *idAllocator) entityID() model.EntityID {
 	a.entity++
 	return model.EntityID(fmt.Sprintf("entity-%06d", a.entity))
@@ -108,6 +114,28 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		peerIDs[fact.peer.fingerprint] = id
 		entities = append(entities, model.Entity{EntityID: id, Kind: model.EntityTLSPeer, DisplayLabel: "TLS peer", Identity: model.EntityIdentity{Kind: model.EntityTLSPeer, TLSPeer: &model.TLSPeerIdentity{Fingerprint: fact.peer.fingerprint}}})
 	}
+	httpFacts := append([]httpFact{}, f.http...)
+	sort.SliceStable(httpFacts, func(i, j int) bool {
+		if endpointSort(httpFacts[i].endpoint, httpFacts[j].endpoint) != endpointSort(httpFacts[j].endpoint, httpFacts[i].endpoint) {
+			return endpointSort(httpFacts[i].endpoint, httpFacts[j].endpoint)
+		}
+		return httpFacts[i].mode < httpFacts[j].mode
+	})
+	httpAssembly := []httpAssemblyFact{}
+	for i, fact := range httpFacts {
+		if !fact.completed {
+			continue
+		}
+		exchangeID := ids.entityID()
+		entry := httpAssemblyFact{fact: fact, exchangeID: exchangeID}
+		entities = append(entities, model.Entity{EntityID: exchangeID, Kind: model.EntityHTTPExchange, DisplayLabel: fmt.Sprintf("HTTP exchange %d", i+1), Identity: model.EntityIdentity{Kind: model.EntityHTTPExchange, HTTPExchange: &model.HTTPExchangeIdentity{Ordinal: uint64(i + 1)}}})
+		if fact.redirectTarget != nil {
+			redirectID := ids.entityID()
+			entry.redirectID = &redirectID
+			entities = append(entities, model.Entity{EntityID: redirectID, Kind: model.EntityURLTarget, DisplayLabel: "redirect target", Identity: model.EntityIdentity{Kind: model.EntityURLTarget, URLTarget: &model.URLTargetIdentity{Marker: true}}})
+		}
+		httpAssembly = append(httpAssembly, entry)
+	}
 
 	vantage := model.VantagePoint{VantageID: vID, Kind: model.VantageKindClientNetwork, Role: model.VantageRoleClient, DisplayLabel: "current client network", Identity: model.VantageIdentity{Kind: model.VantageKindClientNetwork, ClientNetwork: &model.ClientNetworkIdentity{Label: "current client network"}}, Establishment: model.VantageDirectlyObserved, Limitations: []model.Limitation{}}
 	capabilities := append([]model.Capability{}, f.capabilities...)
@@ -196,6 +224,22 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		observations = append(observations, certObs)
 		certificateObservationIDs[fact.endpoint] = append(certificateObservationIDs[fact.endpoint], certObs.ObservationID)
 	}
+	httpObservationIDs := map[endpointKey][]model.ObservationID{}
+	for _, entry := range httpAssembly {
+		fact := entry.fact
+		endpointID := endpointIDs[fact.endpoint]
+		if endpointID == "" {
+			continue
+		}
+		result := &model.HTTPResult{ExchangeEntityID: entry.exchangeID, ResultKind: fact.resultKind, StatusCode: fact.statusCode}
+		if entry.redirectID != nil {
+			result.RedirectTargetEntityID = entry.redirectID
+			result.RedirectTarget = fact.redirectTarget
+		}
+		o := model.Observation{ObservationID: ids.observationID(), Kind: model.ObservationHTTP, SubjectEntityIDs: []model.EntityID{endpointID, entry.exchangeID}, VantageID: &vID, ObservedAt: now, Payload: model.ObservationPayload{Kind: model.ObservationHTTP, HTTP: result}, AcquisitionMethod: model.AcquisitionDirectProbe, SourceComponent: model.SourceHTTPProbe, Sensitivity: model.SensitivitySanitizedDerived, Limitations: []model.Limitation{}}
+		observations = append(observations, o)
+		httpObservationIDs[fact.endpoint] = append(httpObservationIDs[fact.endpoint], o.ObservationID)
+	}
 
 	edges := []model.PathEdge{}
 	resEdgeIDs := map[netip.Addr]model.EdgeID{}
@@ -247,6 +291,17 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 			verifyEdgeIDs[fact.endpoint] = append(verifyEdgeIDs[fact.endpoint], v.EdgeID)
 		}
 	}
+	httpEdgeIDs := map[endpointKey][]model.EdgeID{}
+	for _, entry := range httpAssembly {
+		endpointID := endpointIDs[entry.fact.endpoint]
+		observationIDs := httpObservationIDs[entry.fact.endpoint]
+		if endpointID == "" || len(observationIDs) == 0 {
+			continue
+		}
+		e := model.PathEdge{EdgeID: ids.edgeID(), From: endpointID, To: entry.exchangeID, Relation: model.RelationRequestsHTTPFrom, Provenance: model.ProvenanceDirectlyObserved, EvidenceRefs: []model.EvidenceRef{model.ObservationRef(observationIDs[len(observationIDs)-1])}}
+		edges = append(edges, e)
+		httpEdgeIDs[entry.fact.endpoint] = append(httpEdgeIDs[entry.fact.endpoint], e.EdgeID)
+	}
 
 	branches := []model.Branch{}
 	for _, p := range plans {
@@ -259,10 +314,11 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		}
 		ordered = append(ordered, tlsEdgeIDs[p.key]...)
 		ordered = append(ordered, verifyEdgeIDs[p.key]...)
+		ordered = append(ordered, httpEdgeIDs[p.key]...)
 		branches = append(branches, model.Branch{BranchID: ids.branchID(), OrderedEdgeIDs: ordered, Goal: model.GoalHTTPResponse})
 	}
 
-	definitions, executions := makeChecks(&ids, f, plans, branches, targetID, hostID, endpointIDs, vID, now, tcpFacts, tlsFacts, tcpObservationIDs, tlsObservationIDs, peerObservationIDs, certificateObservationIDs)
+	definitions, executions := makeChecks(&ids, f, plans, branches, targetID, hostID, endpointIDs, vID, now, tcpFacts, tlsFacts, httpFacts, tcpObservationIDs, tlsObservationIDs, peerObservationIDs, certificateObservationIDs, httpObservationIDs)
 	limitations := append([]model.Limitation{}, f.limitations...)
 	for i := range limitations {
 		if limitations[i].LimitationID == "" {
@@ -331,7 +387,7 @@ func resolutionNoResult(ids *idAllocator, hostID model.EntityID, vID model.Vanta
 	return model.Observation{ObservationID: ids.observationID(), Kind: model.ObservationSystemResolution, SubjectEntityIDs: []model.EntityID{hostID}, VantageID: &vID, ObservedAt: now, Payload: model.ObservationPayload{Kind: model.ObservationSystemResolution, Resolution: &model.SystemResolutionResult{HostnameEntityID: hostID, AddressFamily: family, Result: model.ResolutionNoResult}}, AcquisitionMethod: model.AcquisitionDirectProbe, SourceComponent: model.SourceSystemResolver, Sensitivity: model.SensitivitySanitizedDerived, Limitations: []model.Limitation{}}
 }
 
-func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []model.Branch, targetID, hostID model.EntityID, endpointIDs map[endpointKey]model.EntityID, vID model.VantageID, now time.Time, tcpFacts []tcpFact, tlsFacts []tlsFact, tcpObservationIDs, tlsObservationIDs, peerObservationIDs, certificateObservationIDs map[endpointKey][]model.ObservationID) ([]model.CheckDefinition, []model.CheckExecution) {
+func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []model.Branch, targetID, hostID model.EntityID, endpointIDs map[endpointKey]model.EntityID, vID model.VantageID, now time.Time, tcpFacts []tcpFact, tlsFacts []tlsFact, httpFacts []httpFact, tcpObservationIDs, tlsObservationIDs, peerObservationIDs, certificateObservationIDs, httpObservationIDs map[endpointKey][]model.ObservationID) ([]model.CheckDefinition, []model.CheckExecution) {
 	defs := []model.CheckDefinition{}
 	execs := []model.CheckExecution{}
 	version := model.SchemaVersion{Major: 1, Minor: 0, Patch: 0}
@@ -402,6 +458,21 @@ func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []m
 		for _, fact := range endpointTCP {
 			tcpLifecycle, tcpVerdict, tcpReason := tcpExecutionState(fact.result, fact.reason)
 			addExec(tcpID, branchID, tcpLifecycle, tcpVerdict, tcpReason, tcpObservationIDs[fact.endpoint])
+			if f.target.persisted.Scheme == "http" && fact.result == model.TCPAccepted {
+				addExec(tlsID, branchID, model.CheckNotRun, model.CheckSkipped, "not_applicable", nil)
+				addExec(peerID, branchID, model.CheckNotRun, model.CheckSkipped, "not_applicable", nil)
+				addExec(certID, branchID, model.CheckNotRun, model.CheckSkipped, "not_applicable", nil)
+				matchedHTTP := httpFactsFor(httpFacts, fact.endpoint, fact.mode)
+				if len(matchedHTTP) == 0 {
+					addExec(httpID, branchID, model.CheckNotRun, model.CheckSkipped, "probe_pending", nil)
+				} else {
+					for _, http := range matchedHTTP {
+						lifecycle, verdict, reason := httpExecutionState(http)
+						addExec(httpID, branchID, lifecycle, verdict, reason, httpObservationIDs[http.endpoint])
+					}
+				}
+				continue
+			}
 			matchedTLS := []tlsFact{}
 			for _, tls := range tlsFacts {
 				if tls.endpoint == fact.endpoint && tls.mode == fact.mode {
@@ -433,7 +504,15 @@ func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []m
 				certLifecycle := model.CheckCompleted
 				addExec(certID, branchID, certLifecycle, certVerdict, certReason, certificateObservationIDs[tls.endpoint])
 				if tls.verification == model.CertVerified {
-					addExec(httpID, branchID, model.CheckNotRun, model.CheckSkipped, "probe_pending", nil)
+					matchedHTTP := httpFactsFor(httpFacts, tls.endpoint, tls.mode)
+					if len(matchedHTTP) == 0 {
+						addExec(httpID, branchID, model.CheckNotRun, model.CheckSkipped, "probe_pending", nil)
+					} else {
+						for _, http := range matchedHTTP {
+							lifecycle, verdict, reason := httpExecutionState(http)
+							addExec(httpID, branchID, lifecycle, verdict, reason, httpObservationIDs[http.endpoint])
+						}
+					}
 				} else {
 					addExec(httpID, branchID, model.CheckNotRun, model.CheckSkipped, "tls_peer_unverified", nil)
 				}
@@ -441,6 +520,26 @@ func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []m
 		}
 	}
 	return defs, execs
+}
+
+func httpFactsFor(facts []httpFact, endpoint endpointKey, mode attemptMode) []httpFact {
+	out := []httpFact{}
+	for _, fact := range facts {
+		if fact.endpoint == endpoint && fact.mode == mode {
+			out = append(out, fact)
+		}
+	}
+	return out
+}
+
+func httpExecutionState(fact httpFact) (model.CheckLifecycle, model.CheckVerdict, string) {
+	if fact.completed {
+		return model.CheckCompleted, model.CheckPass, ""
+	}
+	if fact.reason == "http_timeout" {
+		return model.CheckTimedOut, model.CheckFail, fact.reason
+	}
+	return model.CheckError, model.CheckUnknown, fact.reason
 }
 
 func subjectWithPeer(endpointID model.EntityID, peerID *model.EntityID) []model.EntityID {

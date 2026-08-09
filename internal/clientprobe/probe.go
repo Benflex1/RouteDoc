@@ -82,6 +82,7 @@ type runFacts struct {
 	endpoints    []endpointPlan
 	tcp          []tcpFact
 	tls          []tlsFact
+	http         []httpFact
 	normal       *normalFact
 	capabilities []model.Capability
 	limitations  []model.Limitation
