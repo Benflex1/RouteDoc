@@ -1,0 +1,13 @@
+RouteDoctor client probe report
+Target: https://example.test:443 (path_present=true root=true count=0 trailing_slash=false query_present=false)
+Vantages: 1  Endpoint branches: 1
+ENDPOINT BRANCHES
+- branch-000001 endpoint=192.0.2.1:443
+  CHECK TCP_CONNECTION: COMPLETED PASS
+  CHECK TLS_TRANSPORT: COMPLETED PASS
+  CHECK TLS_PEER: COMPLETED PASS
+  CHECK CERTIFICATE_VERIFICATION: COMPLETED FAIL reason=untrusted_issuer
+  CHECK HTTP: NOT_RUN SKIPPED reason=tls_peer_unverified
+UNATTRIBUTED CHECK SYSTEM_RESOLUTION: COMPLETED/PASS reason=
+UNATTRIBUTED CHECK TCP_CONNECTION: NOT_RUN/SKIPPED reason=resolution_failed
+No rule-produced primary finding.

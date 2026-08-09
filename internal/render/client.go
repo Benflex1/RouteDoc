@@ -17,7 +17,7 @@ func reportClientConcise(w io.Writer, v model.ValidatedEvaluatedRun) error {
 	if err := writeLine(w, "RouteDoctor client probe report"); err != nil {
 		return err
 	}
-	if err := writeLine(w, "Target: "+targetText(r.Evidence.Target)); err != nil {
+	if err := writeLine(w, "Target: "+clientTargetText(r.Evidence.Target)); err != nil {
 		return err
 	}
 	if err := writeLine(w, fmt.Sprintf("Vantages: %d  Endpoint branches: %d", len(r.Evidence.VantagePoints), len(r.Evidence.ServicePath.Branches))); err != nil {
@@ -92,6 +92,10 @@ func reportClientConcise(w io.Writer, v model.ValidatedEvaluatedRun) error {
 		}
 	}
 	return nil
+}
+
+func clientTargetText(t model.Target) string {
+	return fmt.Sprintf("%s://%s:%d (path_present=%t root=%t count=%d trailing_slash=%t query_present=%t)", t.Scheme, t.Hostname, t.EffectivePort, t.Path.Present, t.Path.IsRoot, t.Path.SegmentCount, t.Path.TrailingSlash, t.Path.QueryPresent)
 }
 
 func reportClientVerbose(w io.Writer, v model.ValidatedEvaluatedRun) error {

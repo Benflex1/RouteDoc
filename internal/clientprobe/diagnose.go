@@ -31,6 +31,7 @@ func diagnose(ctx context.Context, rawURL string, producer model.Producer, d dep
 	if d.dialContext == nil {
 		d.dialContext = (&net.Dialer{}).DialContext
 	}
+	customRoots := d.systemRoots != nil
 	if d.systemRoots == nil {
 		d.systemRoots = x509.SystemCertPool
 	}
@@ -73,6 +74,9 @@ func diagnose(ctx context.Context, rawURL string, producer model.Producer, d dep
 			}
 			roots, rootsErr := d.systemRoots()
 			trustSource := model.TrustSystem
+			if customRoots {
+				trustSource = model.TrustExplicit
+			}
 			if rootsErr != nil {
 				roots = nil
 			}

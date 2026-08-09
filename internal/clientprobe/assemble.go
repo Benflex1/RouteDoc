@@ -15,9 +15,10 @@ type idAllocator struct {
 }
 
 type httpAssemblyFact struct {
-	fact       httpFact
-	exchangeID model.EntityID
-	redirectID *model.EntityID
+	fact          httpFact
+	exchangeID    model.EntityID
+	redirectID    *model.EntityID
+	observationID model.ObservationID
 }
 
 func (a *idAllocator) entityID() model.EntityID {
@@ -146,8 +147,10 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 	observations := []model.Observation{}
 	resolutionObservationIDs := map[netip.Addr]model.ObservationID{}
 	resolutionObs := makeResolutionObservations(&ids, f, hostID, vID, now, addressIDs)
+	resolutionObservationIDsAll := make([]model.ObservationID, 0, len(resolutionObs))
 	observations = append(observations, resolutionObs...)
 	for _, o := range resolutionObs {
+		resolutionObservationIDsAll = append(resolutionObservationIDsAll, o.ObservationID)
 		if o.Payload.Resolution != nil && o.Payload.Resolution.AddressEntityID != nil {
 			for address, id := range addressIDs {
 				if id == *o.Payload.Resolution.AddressEntityID {
@@ -171,6 +174,7 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		return tcpFacts[i].finished.Before(tcpFacts[j].finished)
 	})
 	tcpObservationIDs := map[endpointKey][]model.ObservationID{}
+	tcpObservationByAttempt := map[attemptKey]model.ObservationID{}
 	for _, fact := range tcpFacts {
 		if !fact.exact {
 			continue
@@ -186,10 +190,14 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		o := model.Observation{ObservationID: ids.observationID(), Kind: model.ObservationTCPConnection, SubjectEntityIDs: []model.EntityID{endpointID}, VantageID: &vID, ObservedAt: observedAt, Payload: model.ObservationPayload{Kind: model.ObservationTCPConnection, TCP: &model.TCPConnectionResult{EndpointEntityID: endpointID, Result: fact.result, DurationNS: nonNegative(fact.durationNS), DeadlinePartOfExpectedCondition: fact.result == model.TCPTimedOut}}, AcquisitionMethod: model.AcquisitionDirectProbe, SourceComponent: model.SourceTCPProbe, Sensitivity: model.SensitivitySanitizedDerived, Limitations: []model.Limitation{}}
 		observations = append(observations, o)
 		tcpObservationIDs[fact.endpoint] = append(tcpObservationIDs[fact.endpoint], o.ObservationID)
+		tcpObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}] = o.ObservationID
 	}
 	tlsObservationIDs := map[endpointKey][]model.ObservationID{}
+	tlsObservationByAttempt := map[attemptKey]model.ObservationID{}
 	peerObservationIDs := map[endpointKey][]model.ObservationID{}
+	peerObservationByAttempt := map[attemptKey]model.ObservationID{}
 	certificateObservationIDs := map[endpointKey][]model.ObservationID{}
+	certificateObservationByAttempt := map[attemptKey]model.ObservationID{}
 	for _, fact := range tlsFacts {
 		endpointID := endpointIDs[fact.endpoint]
 		if endpointID == "" {
@@ -208,6 +216,7 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		o := model.Observation{ObservationID: ids.observationID(), Kind: model.ObservationTLSTransport, SubjectEntityIDs: subjectWithPeer(endpointID, peerID), VantageID: &vID, ObservedAt: observedAt, Payload: model.ObservationPayload{Kind: model.ObservationTLSTransport, TLSTransport: transport}, AcquisitionMethod: model.AcquisitionDirectProbe, SourceComponent: model.SourceTLSProbe, Sensitivity: model.SensitivitySanitizedDerived, Limitations: []model.Limitation{}}
 		observations = append(observations, o)
 		tlsObservationIDs[fact.endpoint] = append(tlsObservationIDs[fact.endpoint], o.ObservationID)
+		tlsObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}] = o.ObservationID
 		if fact.peer == nil {
 			continue
 		}
@@ -215,6 +224,7 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		peerObs := model.Observation{ObservationID: ids.observationID(), Kind: model.ObservationTLSPeer, SubjectEntityIDs: []model.EntityID{*peerID}, VantageID: &vID, ObservedAt: observedAt, Payload: model.ObservationPayload{Kind: model.ObservationTLSPeer, TLSPeer: peerSummary}, AcquisitionMethod: model.AcquisitionDirectProbe, SourceComponent: model.SourceTLSProbe, Sensitivity: model.SensitivitySanitizedDerived, Limitations: []model.Limitation{}}
 		observations = append(observations, peerObs)
 		peerObservationIDs[fact.endpoint] = append(peerObservationIDs[fact.endpoint], peerObs.ObservationID)
+		peerObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}] = peerObs.ObservationID
 		result := fact.verification
 		var failure *model.CertificateVerificationResult
 		if result != model.CertVerified {
@@ -223,9 +233,12 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		certObs := model.Observation{ObservationID: ids.observationID(), Kind: model.ObservationCertificateVerification, SubjectEntityIDs: []model.EntityID{*peerID, hostID}, VantageID: &vID, ObservedAt: observedAt, Payload: model.ObservationPayload{Kind: model.ObservationCertificateVerification, CertificateVerification: &model.CertificateVerificationResultPayload{PeerEntityID: *peerID, VerifiedHostname: f.target.persisted.Hostname, VerificationTime: fact.verificationTime.UTC(), TrustSource: fact.trustSource, Result: result, FailureReason: failure}}, AcquisitionMethod: model.AcquisitionDirectProbe, SourceComponent: model.SourceCertificateVerifier, Sensitivity: model.SensitivitySanitizedDerived, Limitations: []model.Limitation{}}
 		observations = append(observations, certObs)
 		certificateObservationIDs[fact.endpoint] = append(certificateObservationIDs[fact.endpoint], certObs.ObservationID)
+		certificateObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}] = certObs.ObservationID
 	}
 	httpObservationIDs := map[endpointKey][]model.ObservationID{}
-	for _, entry := range httpAssembly {
+	httpObservationByAttempt := map[attemptKey]model.ObservationID{}
+	for i := range httpAssembly {
+		entry := &httpAssembly[i]
 		fact := entry.fact
 		endpointID := endpointIDs[fact.endpoint]
 		if endpointID == "" {
@@ -237,8 +250,10 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 			result.RedirectTarget = fact.redirectTarget
 		}
 		o := model.Observation{ObservationID: ids.observationID(), Kind: model.ObservationHTTP, SubjectEntityIDs: []model.EntityID{endpointID, entry.exchangeID}, VantageID: &vID, ObservedAt: now, Payload: model.ObservationPayload{Kind: model.ObservationHTTP, HTTP: result}, AcquisitionMethod: model.AcquisitionDirectProbe, SourceComponent: model.SourceHTTPProbe, Sensitivity: model.SensitivitySanitizedDerived, Limitations: []model.Limitation{}}
+		entry.observationID = o.ObservationID
 		observations = append(observations, o)
 		httpObservationIDs[fact.endpoint] = append(httpObservationIDs[fact.endpoint], o.ObservationID)
+		httpObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}] = o.ObservationID
 	}
 
 	edges := []model.PathEdge{}
@@ -259,7 +274,8 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 
 	connectEdgeIDs := map[endpointKey]model.EdgeID{}
 	for _, fact := range tcpFacts {
-		if !fact.exact || len(tcpObservationIDs[fact.endpoint]) == 0 {
+		observationID := tcpObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}]
+		if !fact.exact || observationID == "" {
 			continue
 		}
 		from := targetID
@@ -270,7 +286,7 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		if to == "" {
 			continue
 		}
-		e := model.PathEdge{EdgeID: ids.edgeID(), From: from, To: to, Relation: model.RelationConnectsTo, Provenance: model.ProvenanceDirectlyObserved, EvidenceRefs: []model.EvidenceRef{model.ObservationRef(tcpObservationIDs[fact.endpoint][len(tcpObservationIDs[fact.endpoint])-1])}}
+		e := model.PathEdge{EdgeID: ids.edgeID(), From: from, To: to, Relation: model.RelationConnectsTo, Provenance: model.ProvenanceDirectlyObserved, EvidenceRefs: []model.EvidenceRef{model.ObservationRef(observationID)}}
 		edges = append(edges, e)
 		connectEdgeIDs[fact.endpoint] = e.EdgeID
 	}
@@ -282,11 +298,16 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		}
 		endpointID := endpointIDs[fact.endpoint]
 		peerID := peerIDs[fact.peer.fingerprint]
-		e := model.PathEdge{EdgeID: ids.edgeID(), From: endpointID, To: peerID, Relation: model.RelationNegotiatesTLSWith, Provenance: model.ProvenanceDirectlyObserved, EvidenceRefs: []model.EvidenceRef{model.ObservationRef(tlsObservationIDs[fact.endpoint][len(tlsObservationIDs[fact.endpoint])-1])}}
+		transportObservationID := tlsObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}]
+		if transportObservationID == "" {
+			continue
+		}
+		e := model.PathEdge{EdgeID: ids.edgeID(), From: endpointID, To: peerID, Relation: model.RelationNegotiatesTLSWith, Provenance: model.ProvenanceDirectlyObserved, EvidenceRefs: []model.EvidenceRef{model.ObservationRef(transportObservationID)}}
 		edges = append(edges, e)
 		tlsEdgeIDs[fact.endpoint] = append(tlsEdgeIDs[fact.endpoint], e.EdgeID)
-		if len(certificateObservationIDs[fact.endpoint]) > 0 {
-			v := model.PathEdge{EdgeID: ids.edgeID(), From: peerID, To: hostID, Relation: model.RelationVerifies, Provenance: model.ProvenanceDirectlyObserved, EvidenceRefs: []model.EvidenceRef{model.ObservationRef(certificateObservationIDs[fact.endpoint][len(certificateObservationIDs[fact.endpoint])-1])}}
+		certificateObservationID := certificateObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}]
+		if certificateObservationID != "" {
+			v := model.PathEdge{EdgeID: ids.edgeID(), From: peerID, To: hostID, Relation: model.RelationVerifies, Provenance: model.ProvenanceDirectlyObserved, EvidenceRefs: []model.EvidenceRef{model.ObservationRef(certificateObservationID)}}
 			edges = append(edges, v)
 			verifyEdgeIDs[fact.endpoint] = append(verifyEdgeIDs[fact.endpoint], v.EdgeID)
 		}
@@ -298,7 +319,11 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		if endpointID == "" || len(observationIDs) == 0 {
 			continue
 		}
-		e := model.PathEdge{EdgeID: ids.edgeID(), From: endpointID, To: entry.exchangeID, Relation: model.RelationRequestsHTTPFrom, Provenance: model.ProvenanceDirectlyObserved, EvidenceRefs: []model.EvidenceRef{model.ObservationRef(observationIDs[len(observationIDs)-1])}}
+		observationID := entry.observationID
+		if observationID == "" {
+			observationID = observationIDs[len(observationIDs)-1]
+		}
+		e := model.PathEdge{EdgeID: ids.edgeID(), From: endpointID, To: entry.exchangeID, Relation: model.RelationRequestsHTTPFrom, Provenance: model.ProvenanceDirectlyObserved, EvidenceRefs: []model.EvidenceRef{model.ObservationRef(observationID)}}
 		edges = append(edges, e)
 		httpEdgeIDs[entry.fact.endpoint] = append(httpEdgeIDs[entry.fact.endpoint], e.EdgeID)
 	}
@@ -318,7 +343,7 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 		branches = append(branches, model.Branch{BranchID: ids.branchID(), OrderedEdgeIDs: ordered, Goal: model.GoalHTTPResponse})
 	}
 
-	definitions, executions := makeChecks(&ids, f, plans, branches, targetID, hostID, endpointIDs, vID, now, tcpFacts, tlsFacts, httpFacts, tcpObservationIDs, tlsObservationIDs, peerObservationIDs, certificateObservationIDs, httpObservationIDs)
+	definitions, executions := makeChecks(&ids, f, plans, branches, targetID, hostID, endpointIDs, vID, now, tcpFacts, tlsFacts, httpFacts, resolutionObservationIDsAll, tcpObservationIDs, tcpObservationByAttempt, tlsObservationIDs, tlsObservationByAttempt, peerObservationIDs, peerObservationByAttempt, certificateObservationIDs, certificateObservationByAttempt, httpObservationIDs, httpObservationByAttempt)
 	limitations := append([]model.Limitation{}, f.limitations...)
 	for i := range limitations {
 		if limitations[i].LimitationID == "" {
@@ -390,7 +415,7 @@ func resolutionNoResult(ids *idAllocator, hostID model.EntityID, vID model.Vanta
 	return model.Observation{ObservationID: ids.observationID(), Kind: model.ObservationSystemResolution, SubjectEntityIDs: []model.EntityID{hostID}, VantageID: &vID, ObservedAt: now, Payload: model.ObservationPayload{Kind: model.ObservationSystemResolution, Resolution: &model.SystemResolutionResult{HostnameEntityID: hostID, AddressFamily: family, Result: model.ResolutionNoResult}}, AcquisitionMethod: model.AcquisitionDirectProbe, SourceComponent: model.SourceSystemResolver, Sensitivity: model.SensitivitySanitizedDerived, Limitations: []model.Limitation{}}
 }
 
-func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []model.Branch, targetID, hostID model.EntityID, endpointIDs map[endpointKey]model.EntityID, vID model.VantageID, now time.Time, tcpFacts []tcpFact, tlsFacts []tlsFact, httpFacts []httpFact, tcpObservationIDs, tlsObservationIDs, peerObservationIDs, certificateObservationIDs, httpObservationIDs map[endpointKey][]model.ObservationID) ([]model.CheckDefinition, []model.CheckExecution) {
+func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []model.Branch, targetID, hostID model.EntityID, endpointIDs map[endpointKey]model.EntityID, vID model.VantageID, now time.Time, tcpFacts []tcpFact, tlsFacts []tlsFact, httpFacts []httpFact, resolutionObservationIDs []model.ObservationID, tcpObservationIDs map[endpointKey][]model.ObservationID, tcpObservationByAttempt map[attemptKey]model.ObservationID, tlsObservationIDs map[endpointKey][]model.ObservationID, tlsObservationByAttempt map[attemptKey]model.ObservationID, peerObservationIDs map[endpointKey][]model.ObservationID, peerObservationByAttempt map[attemptKey]model.ObservationID, certificateObservationIDs map[endpointKey][]model.ObservationID, certificateObservationByAttempt map[attemptKey]model.ObservationID, httpObservationIDs map[endpointKey][]model.ObservationID, httpObservationByAttempt map[attemptKey]model.ObservationID) ([]model.CheckDefinition, []model.CheckExecution) {
 	defs := []model.CheckDefinition{}
 	execs := []model.CheckExecution{}
 	version := model.SchemaVersion{Major: 1, Minor: 0, Patch: 0}
@@ -403,13 +428,15 @@ func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []m
 	addExec := func(checkID model.CheckID, branch *model.BranchID, lifecycle model.CheckLifecycle, verdict model.CheckVerdict, reason string, obs []model.ObservationID) {
 		execs = append(execs, model.CheckExecution{ExecutionID: ids.executionID(), CheckID: checkID, BranchID: branch, VantageID: &vID, Lifecycle: lifecycle, Verdict: verdict, ReasonCode: reasonPtr(reason), ObservationIDs: append([]model.ObservationID{}, obs...), VisibilityAssessmentIDs: []model.VisibilityID{}})
 	}
-	resolutionObs := []model.ObservationID{}
 	resolutionLifecycle, resolutionVerdict, resolutionReason := model.CheckCompleted, model.CheckPass, f.resolution.reason
+	if f.resolution.truncated {
+		resolutionReason = reasonResolutionResultCap
+	}
 	if !f.resolution.completed {
 		resolutionLifecycle, resolutionVerdict = model.CheckError, model.CheckUnknown
 	}
 	resolutionID := addDef(model.CheckSystemResolution, hostID, nil, "RESOLVED", deadline(resolutionTimeout))
-	addExec(resolutionID, nil, resolutionLifecycle, resolutionVerdict, resolutionReason, resolutionObs)
+	addExec(resolutionID, nil, resolutionLifecycle, resolutionVerdict, resolutionReason, resolutionObservationIDs)
 
 	normalLifecycle, normalVerdict, normalReason := model.CheckNotRun, model.CheckSkipped, "resolution_failed"
 	var normalObs []model.ObservationID
@@ -417,7 +444,7 @@ func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []m
 		if fact.mode == modeNormal {
 			normalLifecycle, normalVerdict, normalReason = tcpExecutionState(fact.result, fact.reason)
 			if fact.exact {
-				normalObs = append(normalObs, tcpObservationIDs[fact.endpoint]...)
+				normalObs = append(normalObs, tcpObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}])
 			}
 		}
 	}
@@ -460,7 +487,7 @@ func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []m
 		}
 		for _, fact := range endpointTCP {
 			tcpLifecycle, tcpVerdict, tcpReason := tcpExecutionState(fact.result, fact.reason)
-			addExec(tcpID, branchID, tcpLifecycle, tcpVerdict, tcpReason, tcpObservationIDs[fact.endpoint])
+			addExec(tcpID, branchID, tcpLifecycle, tcpVerdict, tcpReason, []model.ObservationID{tcpObservationByAttempt[attemptKey{endpoint: fact.endpoint, mode: fact.mode}]})
 			if f.target.persisted.Scheme == "http" && fact.result == model.TCPAccepted {
 				addExec(tlsID, branchID, model.CheckNotRun, model.CheckSkipped, "not_applicable", nil)
 				addExec(peerID, branchID, model.CheckNotRun, model.CheckSkipped, "not_applicable", nil)
@@ -471,7 +498,7 @@ func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []m
 				} else {
 					for _, http := range matchedHTTP {
 						lifecycle, verdict, reason := httpExecutionState(http)
-						addExec(httpID, branchID, lifecycle, verdict, reason, httpObservationIDs[http.endpoint])
+						addExec(httpID, branchID, lifecycle, verdict, reason, []model.ObservationID{httpObservationByAttempt[attemptKey{endpoint: http.endpoint, mode: http.mode}]})
 					}
 				}
 				continue
@@ -491,21 +518,21 @@ func makeChecks(ids *idAllocator, f runFacts, plans []endpointPlan, branches []m
 			}
 			for _, tls := range matchedTLS {
 				tlsLifecycle, tlsVerdict, tlsReason := tlsExecutionState(tls.result, tls.reason)
-				addExec(tlsID, branchID, tlsLifecycle, tlsVerdict, tlsReason, tlsObservationIDs[tls.endpoint])
+				addExec(tlsID, branchID, tlsLifecycle, tlsVerdict, tlsReason, []model.ObservationID{tlsObservationByAttempt[attemptKey{endpoint: tls.endpoint, mode: tls.mode}]})
 				if tls.peer == nil {
 					addExec(peerID, branchID, model.CheckNotRun, model.CheckSkipped, "tls_peer_missing", nil)
 					addExec(certID, branchID, model.CheckNotRun, model.CheckSkipped, "skipped_dependency", nil)
 					addExec(httpID, branchID, model.CheckNotRun, model.CheckSkipped, "tls_peer_unverified", nil)
 					continue
 				}
-				addExec(peerID, branchID, model.CheckCompleted, model.CheckPass, "", peerObservationIDs[tls.endpoint])
+				addExec(peerID, branchID, model.CheckCompleted, model.CheckPass, "", []model.ObservationID{peerObservationByAttempt[attemptKey{endpoint: tls.endpoint, mode: tls.mode}]})
 				certVerdict := model.CheckFail
 				certReason := certificateReasonCode(tls.verification)
 				if tls.verification == model.CertVerified {
 					certVerdict, certReason = model.CheckPass, ""
 				}
 				certLifecycle := model.CheckCompleted
-				addExec(certID, branchID, certLifecycle, certVerdict, certReason, certificateObservationIDs[tls.endpoint])
+				addExec(certID, branchID, certLifecycle, certVerdict, certReason, []model.ObservationID{certificateObservationByAttempt[attemptKey{endpoint: tls.endpoint, mode: tls.mode}]})
 				if tls.verification == model.CertVerified {
 					matchedHTTP := httpFactsFor(httpFacts, tls.endpoint, tls.mode)
 					if len(matchedHTTP) == 0 {

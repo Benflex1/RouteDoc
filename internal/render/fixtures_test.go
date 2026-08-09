@@ -11,7 +11,7 @@ import (
 
 func TestGoldenFixtures(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "reports", "v1")
-	cases := []string{"valid-multibranch-no-global", "ipv4-success-ipv6-refused-partial", "tls-hostname-mismatch-http-skipped", "tls-transport-endpoint-adversarial", "caddy-active-over-configured-intent", "upstream-refused-wrong-vantage", "listener-absent-complete-scope", "listener-absent-partial-scope", "two-proxy-upstreams-no-global", "operator-asserted-expected-path", "multiclaim-acyclic", "provenance-recoverable-stored", "reevaluation-replacement-before", "reevaluation-replacement-after", "path-summary-only", "sensitive-derived-only"}
+	cases := []string{"valid-multibranch-no-global", "ipv4-success-ipv6-refused-partial", "tls-hostname-mismatch-http-skipped", "tls-transport-endpoint-adversarial", "caddy-active-over-configured-intent", "upstream-refused-wrong-vantage", "listener-absent-complete-scope", "listener-absent-partial-scope", "two-proxy-upstreams-no-global", "operator-asserted-expected-path", "multiclaim-acyclic", "provenance-recoverable-stored", "reevaluation-replacement-before", "reevaluation-replacement-after", "path-summary-only", "sensitive-derived-only", "client-probe-http-success", "client-probe-tls-untrusted", "client-probe-unattempted-address"}
 	for _, name := range cases {
 		data, err := os.ReadFile(filepath.Join(root, name, "report.json"))
 		if err != nil {

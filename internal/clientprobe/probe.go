@@ -26,6 +26,11 @@ type endpointKey struct {
 	port    uint16
 }
 
+type attemptKey struct {
+	endpoint endpointKey
+	mode     attemptMode
+}
+
 type endpointPlan struct {
 	key      endpointKey
 	retained bool
@@ -95,7 +100,6 @@ func defaultDependencies() dependencies {
 		now:         time.Now,
 		lookupNetIP: net.DefaultResolver.LookupNetIP,
 		dialContext: (&net.Dialer{}).DialContext,
-		systemRoots: x509.SystemCertPool,
 		lookupEnv:   os.LookupEnv,
 	}
 }
