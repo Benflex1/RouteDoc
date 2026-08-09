@@ -115,3 +115,53 @@ func TestTCPFactEndpointFormatting(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestTLSValidatesPresentedLeafAndIntermediates(t *testing.T) {
+	fixture := newTLSFixture(t, "example.test", true)
+	client, server := net.Pipe()
+	go fixture.serve(server)
+	fact := executeTLS(context.Background(), endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}, "example.test", client, fixture.roots, model.TrustExplicit, time.Now)
+	if fact.result != model.TLSTransportCompleted || fact.peer == nil || fact.verification != model.CertVerified || fact.tlsConn == nil {
+		t.Fatalf("TLS fact = %#v", fact)
+	}
+	if !strings.HasPrefix(fact.peer.fingerprint, "sha256:") || fact.peer.dnsSANCount == 0 {
+		t.Fatalf("peer summary = %#v", fact.peer)
+	}
+	_ = fact.tlsConn.Close()
+}
+
+func TestTLSPreCertificateFailureHasNoPeer(t *testing.T) {
+	client, server := net.Pipe()
+	_ = server.Close()
+	fact := executeTLS(context.Background(), endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}, "example.test", client, nil, model.TrustSystem, time.Now)
+	if fact.result != model.TLSTransportFailed || fact.peer != nil || fact.tlsConn != nil {
+		t.Fatalf("pre-certificate TLS fact = %#v", fact)
+	}
+}
+
+func TestTLSVerificationSeparatesHostnameAndTrust(t *testing.T) {
+	fixture := newTLSFixture(t, "other.test", true)
+	client, server := net.Pipe()
+	go fixture.serve(server)
+	fact := executeTLS(context.Background(), endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}, "example.test", client, fixture.roots, model.TrustExplicit, time.Now)
+	if fact.peer == nil || fact.verification != model.CertHostnameMismatch || fact.tlsConn != nil {
+		t.Fatalf("hostname verification fact = %#v", fact)
+	}
+}
+
+func TestTLSAssemblyPassesArchitecture13Validation(t *testing.T) {
+	fixture := newTLSFixture(t, "example.test", true)
+	client, server := net.Pipe()
+	go fixture.serve(server)
+	fact := executeTLS(context.Background(), endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}, "example.test", client, fixture.roots, model.TrustExplicit, time.Now)
+	facts := topologyFacts([]netip.Addr{netip.MustParseAddr("192.0.2.1")})
+	facts.tcp = []tcpFact{{mode: modePinned, endpoint: fact.endpoint, result: model.TCPAccepted, exact: true, finished: time.Now().UTC()}}
+	facts.tls = []tlsFact{fact}
+	r := assembleEvidence(facts)
+	if _, issues := model.ValidateEvidenceRun(r); len(issues) != 0 {
+		t.Fatalf("TLS evidence is invalid: %v", issues)
+	}
+	if fact.tlsConn != nil {
+		_ = fact.tlsConn.Close()
+	}
+}

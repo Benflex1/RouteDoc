@@ -2,6 +2,10 @@ package clientprobe
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"net"
 	"net/netip"
 	"sort"
@@ -99,4 +103,119 @@ func exactRemoteEndpoint(conn net.Conn) (endpointKey, bool) {
 		return endpointKey{}, false
 	}
 	return endpointKey{address: address.Unmap(), port: uint16(remote.Port)}, true
+}
+
+type peerFact struct {
+	fingerprint string
+	count       uint64
+	notBefore   time.Time
+	notAfter    time.Time
+	sanType     model.SANType
+	sanCount    uint64
+	dnsSANCount uint64
+}
+
+type tlsFact struct {
+	mode             attemptMode
+	endpoint         endpointKey
+	result           model.TLSTransportResult
+	reason           string
+	protocolVersion  string
+	cipherSuite      string
+	negotiatedALPN   string
+	sniSent          string
+	durationNS       int64
+	peer             *peerFact
+	verification     model.CertificateVerificationResult
+	verificationTime time.Time
+	trustSource      model.TrustSource
+	tlsConn          *tls.Conn
+}
+
+func executeTLS(parent context.Context, endpoint endpointKey, hostname string, conn net.Conn, roots *x509.CertPool, trustSource model.TrustSource, now func() time.Time) tlsFact {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if now == nil {
+		now = time.Now
+	}
+	started := now().UTC()
+	fact := tlsFact{endpoint: endpoint, result: model.TLSTransportFailed, reason: "tls_failed", trustSource: trustSource, verification: model.CertVerifierUnavailable, verificationTime: started}
+	if conn == nil {
+		return fact
+	}
+	ctx, cancel := context.WithTimeout(parent, tlsTimeout)
+	tlsConn := tls.Client(conn, &tls.Config{ServerName: hostname, InsecureSkipVerify: true, NextProtos: []string{"http/1.1"}}) // explicit verification follows below
+	err := tlsConn.HandshakeContext(ctx)
+	cancel()
+	finished := now().UTC()
+	if finished.Before(started) {
+		finished = started
+	}
+	fact.durationNS = finished.Sub(started).Nanoseconds()
+	state := tlsConn.ConnectionState()
+	if err != nil {
+		_, fact.reason = normalizeTLSError(err)
+	} else {
+		fact.result = model.TLSTransportCompleted
+		fact.reason = ""
+		fact.protocolVersion = tlsVersionToken(state.Version)
+		fact.cipherSuite = tls.CipherSuiteName(state.CipherSuite)
+		fact.negotiatedALPN = state.NegotiatedProtocol
+		fact.sniSent = hostname
+	}
+	if len(state.PeerCertificates) > 0 {
+		leaf := state.PeerCertificates[0]
+		fact.peer = summarizePeer(leaf, uint64(len(state.PeerCertificates)))
+		fact.verificationTime = started.UTC()
+		selectedRoots := roots
+		if selectedRoots == nil {
+			selectedRoots, err = x509.SystemCertPool()
+			fact.trustSource = model.TrustSystem
+		}
+		if selectedRoots == nil {
+			fact.verification = model.CertVerifierUnavailable
+		} else {
+			intermediates := x509.NewCertPool()
+			for _, certificate := range state.PeerCertificates[1:] {
+				intermediates.AddCert(certificate)
+			}
+			_, verifyErr := leaf.Verify(x509.VerifyOptions{DNSName: hostname, Roots: selectedRoots, Intermediates: intermediates, CurrentTime: fact.verificationTime, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}})
+			fact.verification = normalizeVerification(leaf, verifyErr, fact.verificationTime)
+		}
+		if fact.verification == model.CertVerified && fact.result == model.TLSTransportCompleted {
+			fact.tlsConn = tlsConn
+			return fact
+		}
+	}
+	_ = tlsConn.Close()
+	return fact
+}
+
+func tlsVersionToken(version uint16) string {
+	switch version {
+	case tls.VersionTLS10:
+		return "TLS1.0"
+	case tls.VersionTLS11:
+		return "TLS1.1"
+	case tls.VersionTLS12:
+		return "TLS1.2"
+	case tls.VersionTLS13:
+		return "TLS1.3"
+	default:
+		return ""
+	}
+}
+
+func summarizePeer(leaf *x509.Certificate, count uint64) *peerFact {
+	digest := sha256.Sum256(leaf.Raw)
+	peer := &peerFact{fingerprint: "sha256:" + hex.EncodeToString(digest[:]), count: count, notBefore: leaf.NotBefore.UTC(), notAfter: leaf.NotAfter.UTC()}
+	if len(leaf.DNSNames) > 0 {
+		peer.sanType, peer.sanCount, peer.dnsSANCount = model.SANDNS, uint64(len(leaf.DNSNames)), uint64(len(leaf.DNSNames))
+	} else if len(leaf.IPAddresses) > 0 {
+		peer.sanType, peer.sanCount = model.SANIP, uint64(len(leaf.IPAddresses))
+	} else {
+		peer.sanType, peer.sanCount = model.SANOther, uint64(len(leaf.EmailAddresses)+len(leaf.URIs))
+	}
+	return peer
 }
