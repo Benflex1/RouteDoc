@@ -60,3 +60,28 @@ func parseValidateArgs(a []string) (string, bool, bool) {
 	}
 	return path, jsonOut, path != ""
 }
+
+func parseProbeArgs(a []string) (string, bool, bool, bool) {
+	urlText := ""
+	verbose, jsonOut := false, false
+	for _, x := range a {
+		switch x {
+		case "--verbose":
+			if verbose {
+				return "", false, false, false
+			}
+			verbose = true
+		case "--json":
+			if jsonOut {
+				return "", false, false, false
+			}
+			jsonOut = true
+		default:
+			if urlText != "" {
+				return "", false, false, false
+			}
+			urlText = x
+		}
+	}
+	return urlText, verbose, jsonOut, urlText != ""
+}
