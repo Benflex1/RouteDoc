@@ -65,6 +65,77 @@ func TestPinnedTCPAcceptedIsExactEndpoint(t *testing.T) {
 	}
 }
 
+func TestPinnedTCPSuccessUsesActualRemotePeer(t *testing.T) {
+	requested := netip.MustParseAddr("192.0.2.1")
+	actual := netip.MustParseAddr("198.51.100.9")
+	facts := topologyFacts([]netip.Addr{requested})
+	facts.tcp = executeTCPStrategies(context.Background(), context.Background(), facts.target, facts.endpoints, func(_ context.Context, _, address string) (net.Conn, error) {
+		if address == net.JoinHostPort(requested.String(), "443") {
+			return &testConn{remote: &net.TCPAddr{IP: net.ParseIP(actual.String()), Port: 443}}, nil
+		}
+		return nil, errors.New("normal failed")
+	}, time.Now)
+	var pinned tcpFact
+	for _, fact := range facts.tcp {
+		if fact.mode == modePinned {
+			pinned = fact
+		}
+	}
+	if pinned.result != model.TCPAccepted || !pinned.exact || pinned.endpoint.address != actual {
+		t.Fatalf("pinned fact = %#v, want accepted actual endpoint", pinned)
+	}
+	r := assembleEvidence(facts)
+	requestedID := endpointEntityID(r, endpointKey{address: requested, port: 443})
+	actualID := endpointEntityID(r, endpointKey{address: actual, port: 443})
+	if requestedID == "" || actualID == "" || requestedID == actualID {
+		t.Fatalf("endpoint entities requested=%q actual=%q", requestedID, actualID)
+	}
+	var acceptedActual bool
+	for _, observation := range r.Observations {
+		if observation.Payload.TCP == nil || observation.Payload.TCP.Result != model.TCPAccepted {
+			continue
+		}
+		if observation.Payload.TCP.EndpointEntityID == requestedID {
+			t.Fatal("requested endpoint received false accepted evidence")
+		}
+		if observation.Payload.TCP.EndpointEntityID == actualID {
+			acceptedActual = true
+		}
+	}
+	if !acceptedActual || branchForEndpoint(r, endpointKey{address: actual, port: 443}) == nil {
+		t.Fatal("actual peer did not receive accepted evidence and a direct branch")
+	}
+	actualAddressID := endpointAddressEntity(r, endpointKey{address: actual, port: 443})
+	for _, edge := range r.ServicePath.Edges {
+		if edge.Relation == model.RelationResolvesTo && edge.To == actualAddressID {
+			t.Fatal("differing pinned peer received fabricated RESOLVES_TO edge")
+		}
+	}
+}
+
+func TestPinnedTCPUnknownRemoteCannotFabricateEndpointEvidence(t *testing.T) {
+	requested := netip.MustParseAddr("192.0.2.1")
+	facts := topologyFacts([]netip.Addr{requested})
+	facts.tcp = executeTCPStrategies(context.Background(), context.Background(), facts.target, facts.endpoints, func(_ context.Context, _, address string) (net.Conn, error) {
+		if address == "192.0.2.1:443" {
+			return &testConn{remote: nil}, nil
+		}
+		return nil, errors.New("normal failed")
+	}, time.Now)
+	for _, fact := range facts.tcp {
+		if fact.mode == modePinned && (fact.result == model.TCPAccepted || fact.exact) {
+			t.Fatalf("unknown pinned peer fabricated success: %#v", fact)
+		}
+	}
+	r := assembleEvidence(facts)
+	requestedID := endpointEntityID(r, endpointKey{address: requested, port: 443})
+	for _, observation := range r.Observations {
+		if observation.Payload.TCP != nil && observation.Payload.TCP.EndpointEntityID == requestedID && observation.Payload.TCP.Result == model.TCPAccepted {
+			t.Fatal("unknown pinned peer became accepted endpoint evidence")
+		}
+	}
+}
+
 func TestNormalSuccessOutsideRetainedIsDirectlyAttributed(t *testing.T) {
 	facts := topologyFacts([]netip.Addr{netip.MustParseAddr("192.0.2.1")})
 	facts.tcp = executeTCPStrategies(context.Background(), context.Background(), facts.target, facts.endpoints, func(_ context.Context, _, address string) (net.Conn, error) {

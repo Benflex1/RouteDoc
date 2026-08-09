@@ -63,14 +63,14 @@ func executeTCPStrategies(totalCtx, _ context.Context, target requestTarget, pla
 				results <- tcpFact{mode: s.mode, endpoint: s.endpoint, result: result, reason: reason, durationNS: finished.Sub(started).Nanoseconds(), started: started, finished: finished, exact: s.mode == modePinned}
 				return
 			}
-			if s.mode == modePinned {
-				results <- tcpFact{mode: s.mode, endpoint: s.endpoint, result: model.TCPAccepted, durationNS: finished.Sub(started).Nanoseconds(), started: started, finished: finished, exact: true, conn: conn}
-				return
-			}
 			remote, ok := exactRemoteEndpoint(conn)
 			if !ok {
 				_ = conn.Close()
-				results <- tcpFact{mode: s.mode, endpoint: s.endpoint, result: model.TCPFailed, reason: "normal_endpoint_unknown", durationNS: finished.Sub(started).Nanoseconds(), started: started, finished: finished, exact: false}
+				reason := "normal_endpoint_unknown"
+				if s.mode == modePinned {
+					reason = "pinned_endpoint_unknown"
+				}
+				results <- tcpFact{mode: s.mode, endpoint: s.endpoint, result: model.TCPFailed, reason: reason, durationNS: finished.Sub(started).Nanoseconds(), started: started, finished: finished, exact: false}
 				return
 			}
 			results <- tcpFact{mode: s.mode, endpoint: remote, result: model.TCPAccepted, durationNS: finished.Sub(started).Nanoseconds(), started: started, finished: finished, exact: true, conn: conn}
