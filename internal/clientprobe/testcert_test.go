@@ -21,6 +21,12 @@ type tlsFixture struct {
 func newTLSFixture(t *testing.T, serverName string, rootsIncludeLeaf bool) *tlsFixture {
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Second)
+	return newTLSFixtureWithValidity(t, serverName, rootsIncludeLeaf, now, now.Add(-time.Hour), now.Add(24*time.Hour))
+}
+
+func newTLSFixtureWithValidity(t *testing.T, serverName string, rootsIncludeLeaf bool, now, leafNotBefore, leafNotAfter time.Time) *tlsFixture {
+	t.Helper()
+	now = now.UTC().Truncate(time.Second)
 	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +44,7 @@ func newTLSFixture(t *testing.T, serverName string, rootsIncludeLeaf bool) *tlsF
 	if err != nil {
 		t.Fatal(err)
 	}
-	leafTemplate := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: serverName}, DNSNames: []string{serverName}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	leafTemplate := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: serverName}, DNSNames: []string{serverName}, NotBefore: leafNotBefore.UTC(), NotAfter: leafNotAfter.UTC(), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
 	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, caCert, &leafKey.PublicKey, caKey)
 	if err != nil {
 		t.Fatal(err)

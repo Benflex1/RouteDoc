@@ -278,6 +278,53 @@ func TestTLSVerificationSeparatesHostnameAndTrust(t *testing.T) {
 	}
 }
 
+func TestCertificateVerificationEnumsAcceptance(t *testing.T) {
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name, serverName string
+		roots            bool
+		before, after    time.Time
+		want             model.CertificateVerificationResult
+	}{
+		{name: "valid chain", serverName: "example.test", roots: true, before: now.Add(-time.Hour), after: now.Add(time.Hour), want: model.CertVerified},
+		{name: "untrusted issuer", serverName: "example.test", roots: false, before: now.Add(-time.Hour), after: now.Add(time.Hour), want: model.CertUntrustedIssuer},
+		{name: "expired leaf", serverName: "example.test", roots: true, before: now.Add(-2 * time.Hour), after: now.Add(-time.Hour), want: model.CertExpired},
+		{name: "not yet valid leaf", serverName: "example.test", roots: true, before: now.Add(time.Hour), after: now.Add(2 * time.Hour), want: model.CertNotYetValid},
+		{name: "hostname mismatch", serverName: "other.test", roots: true, before: now.Add(-time.Hour), after: now.Add(time.Hour), want: model.CertHostnameMismatch},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newTLSFixtureWithValidity(t, tc.serverName, tc.roots, now, tc.before, tc.after)
+			client, server := net.Pipe()
+			go fixture.serve(server)
+			fact := executeTLS(context.Background(), endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}, "example.test", client, fixture.roots, model.TrustExplicit, func() time.Time { return now })
+			if fact.result != model.TLSTransportCompleted || fact.peer == nil || fact.verification != tc.want || (tc.want != model.CertVerified && fact.tlsConn != nil) {
+				t.Fatalf("TLS fact = %#v, want verification %s", fact, tc.want)
+			}
+			facts := topologyFacts([]netip.Addr{netip.MustParseAddr("192.0.2.1")})
+			facts.started, facts.finished = now, now.Add(time.Second)
+			facts.tcp = []tcpFact{{mode: modePinned, endpoint: fact.endpoint, result: model.TCPAccepted, exact: true, finished: now}}
+			facts.tls = []tlsFact{fact}
+			r := assembleEvidence(facts)
+			found := false
+			for _, observation := range r.Observations {
+				if observation.Payload.CertificateVerification != nil {
+					if observation.Payload.CertificateVerification.Result != tc.want {
+						t.Fatalf("persisted certificate result = %s, want %s", observation.Payload.CertificateVerification.Result, tc.want)
+					}
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("certificate result was not persisted")
+			}
+			if fact.tlsConn != nil {
+				_ = fact.tlsConn.Close()
+			}
+		})
+	}
+}
+
 func TestTLSAssemblyPassesArchitecture13Validation(t *testing.T) {
 	fixture := newTLSFixture(t, "example.test", true)
 	client, server := net.Pipe()
@@ -311,6 +358,61 @@ func TestHTTPReusesExactEstablishedConnection(t *testing.T) {
 	if fact.resultKind != model.HTTPResponse || fact.statusCode != 401 || requests != 1 || fact.dialCalls != 1 {
 		t.Fatalf("HTTP fact = %#v requests=%d", fact, requests)
 	}
+}
+
+func TestHTTPSConnectionOwnershipAcceptance(t *testing.T) {
+	fixture := newTLSFixture(t, "example.test", true)
+	client, server := net.Pipe()
+	var handshakes, requests int
+	serverDone := make(chan error, 1)
+	go func() {
+		defer server.Close()
+		serverTLS := tls.Server(server, &tls.Config{
+			Certificates: []tls.Certificate{fixture.certificate},
+			NextProtos:   []string{"http/1.1"},
+			VerifyConnection: func(tls.ConnectionState) error {
+				handshakes++
+				return nil
+			},
+		})
+		if err := serverTLS.Handshake(); err != nil {
+			serverDone <- err
+			return
+		}
+		req, err := http.ReadRequest(bufio.NewReader(serverTLS))
+		if err != nil {
+			serverDone <- err
+			return
+		}
+		if req.Host != "example.test" {
+			serverDone <- fmt.Errorf("Host = %q, want example.test", req.Host)
+			return
+		}
+		requests++
+		_, _ = serverTLS.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"))
+		serverDone <- nil
+	}()
+
+	target, err := parseTarget("https://example.test/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}
+	tlsFact := executeTLS(context.Background(), endpoint, target.persisted.Hostname, client, fixture.roots, model.TrustExplicit, time.Now)
+	if tlsFact.tlsConn == nil || tlsFact.verification != model.CertVerified {
+		t.Fatalf("TLS fact = %#v", tlsFact)
+	}
+	httpFact := executeHTTP(context.Background(), target, endpoint, nil, tlsFact.tlsConn, time.Now)
+	if httpFact.resultKind != model.HTTPResponse || httpFact.dialCalls != 1 || httpFact.requestCalls != 1 {
+		t.Fatalf("HTTP ownership fact = %#v", httpFact)
+	}
+	if err := <-serverDone; err != nil {
+		t.Fatal(err)
+	}
+	if handshakes != 1 || requests != 1 {
+		t.Fatalf("server handshakes=%d requests=%d, want one each", handshakes, requests)
+	}
+	_ = tlsFact.tlsConn.Close()
 }
 
 func TestLocalServersObserveImplicitAndExplicitHostAuthority(t *testing.T) {
@@ -408,6 +510,49 @@ func TestRedirectIsObservedButNotFollowed(t *testing.T) {
 	}
 	if strings.Contains(fmt.Sprint(fact), "private") || strings.Contains(fmt.Sprint(fact), "secret") {
 		t.Fatal("redirect fact retained raw URL data")
+	}
+}
+
+func TestHTTPCancellationAcceptance(t *testing.T) {
+	client, server := net.Pipe()
+	serverDone := make(chan struct{})
+	go func() {
+		defer server.Close()
+		_, _ = http.ReadRequest(bufio.NewReader(server))
+		<-serverDone
+	}()
+	target, err := parseTarget("http://example.test/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+	fact := executeHTTP(parent, target, endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 80}, client, nil, time.Now)
+	close(serverDone)
+	if fact.completed || fact.reason != "http_canceled" || fact.requestCalls != 1 {
+		t.Fatalf("HTTP cancellation fact = %#v", fact)
+	}
+}
+
+func TestHTTPStageTimeoutAcceptance(t *testing.T) {
+	client, server := net.Pipe()
+	serverDone := make(chan struct{})
+	go func() {
+		defer server.Close()
+		_, _ = http.ReadRequest(bufio.NewReader(server))
+		<-serverDone
+	}()
+	target, err := parseTarget("http://example.test/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fact := executeHTTP(context.Background(), target, endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 80}, client, nil, time.Now)
+	close(serverDone)
+	if fact.completed || fact.reason != "http_timeout" || fact.requestCalls != 1 {
+		t.Fatalf("HTTP stage timeout fact = %#v", fact)
 	}
 }
 
