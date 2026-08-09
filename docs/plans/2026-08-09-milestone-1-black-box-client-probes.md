@@ -6,7 +6,7 @@
 
 **Architecture:** Add one focused `internal/clientprobe` package that parses a transient URL, resolves and retains endpoint alternatives, runs one ordinary hostname attempt plus one pinned attempt per available family, and assembles only existing architecture-1.3 evidence. Service-path branches represent endpoint alternatives, never probe modes. The package validates and evaluates the report with the frozen M0 model; exit status is derived only from the resulting `ValidatedEvaluatedRun`.
 
-**Tech Stack:** Go 1.26.5 standard library (`context`, `net`, `net/netip`, `net/http`, `net/url`, `crypto/tls`, `crypto/x509`, `errors`, `time`) plus the repository's existing internal model, rules, renderer, and schema packages. Existing third-party modules remain test-only; add no production dependency.
+**Tech Stack:** Go 1.26.5 standard library (`context`, `net`, `net/netip`, `net/http`, `net/url`, `crypto/tls`, `crypto/x509`, `errors`, `os`, `time`) plus the repository's existing internal model, rules, renderer, and schema packages. Existing third-party modules remain test-only; add no production dependency.
 
 ## Global Constraints
 
@@ -18,7 +18,7 @@
 - Redirect responses are observed and sanitized but never followed; redirect-follow cap is `0`.
 - No new persisted observation, claim, finding, enum, payload field, rule version, schema version, or arbitrary metadata.
 - No Linux origin inspection, `/proc`, Caddy, Docker, proxy use, plugins, monitoring, daemon behavior, privilege escalation, or M2 multi-address/redirect hardening.
-- Reject URL credentials; send no authentication or cookies; disable HTTP proxy environment use and automatic decompression.
+- Reject URL credentials; send no authentication or cookies; detect but never honor HTTP proxy environment configuration, and disable automatic decompression.
 - Preserve the URL hostname for TLS SNI and HTTP Host on pinned connections.
 - Never send HTTP after failed or unknown certificate verification.
 - Persist no raw path segments, query values, fragment, response body, response headers, certificate chain, or raw error strings.
@@ -137,6 +137,7 @@ type dependencies struct {
 	lookupNetIP func(context.Context, string, string) ([]netip.Addr, error)
 	dialContext func(context.Context, string, string) (net.Conn, error)
 	systemRoots func() (*x509.CertPool, error)
+	lookupEnv   func(string) (string, bool)
 }
 
 func diagnose(
@@ -293,6 +294,7 @@ func TestUnattemptedEndpointHasSkippedTCPAndDependencies(t *testing.T) {}
 func TestResolutionTruncationAddsPartialVisibility(t *testing.T) {}
 func TestNoProbeModeBranchExists(t *testing.T) {}
 func TestNormalOutsideRetainedUsesDirectConnectEdgeOnly(t *testing.T) {}
+func TestProxyEnvironmentUsesSafeExistingCapability(t *testing.T) {}
 ```
 
 For `A,B,C`, assert three branches and endpoint check definitions; `B` and `C` have `NOT_RUN/SKIPPED` TCP executions with `address_attempt_cap`. Assert no edge to their socket endpoints. Assert the outside endpoint branch has only directly observed connection topology and no fabricated resolution observation/edge.
@@ -300,7 +302,7 @@ For `A,B,C`, assert three branches and endpoint check definitions; `B` and `C` h
 - [ ] **Step 2: Run the red topology tests**
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go test ./internal/clientprobe -run 'TestRetained|TestResolution|TestUnattempted|TestNoProbeMode|TestNormalOutside'
+GOTOOLCHAIN=go1.26.5 go test ./internal/clientprobe -run 'TestRetained|TestResolution|TestUnattempted|TestNoProbeMode|TestNormalOutside|TestProxyEnvironment'
 ```
 
 Expected: FAIL because topology planning and evidence assembly do not exist.
@@ -327,12 +329,25 @@ type endpointPlan struct {
 
 Create all required non-nil M0 collections, the single `CLIENT_NETWORK` vantage, target/hostname/address/endpoint entities, resolution edges, branches, check DAGs, and explicit skipped executions. A resolver result above eight per family adds a run-scoped `model.LimitationPartialVisibility`; the resolution execution reason is `resolution_result_cap` but remains completed if retained results are valid.
 
-Use check version `1.0.0`, network inputs, empty capability lists, fixed deadlines, and expected result tokens: `RESOLVED`, `ACCEPTED`, `COMPLETED`, `PRESENTED`, `VERIFIED`, and `RESPONSE`.
+Before probing, inspect only the presence of non-empty `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and their lowercase forms through the injected `lookupEnv` (`os.LookupEnv` in production). These are the variables used by Go's HTTP proxy environment policy; discard each value immediately after reducing the set to one boolean. When any is present, persist exactly:
+
+```go
+model.Capability{
+	CapabilityID: "capability-000001",
+	Kind:         model.CapabilityHTTPProbe,
+	State:        model.CapabilityAvailable,
+	ReasonCode:   "proxy_environment_detected_ignored",
+}
+```
+
+This existing capability representation is semantically accurate: the direct HTTP probe remains available, while its safe reason records that ambient proxy configuration was detected and intentionally ignored. Do not add `PROXY_INSTANCE`, proxy-route observations, a generic limitation, an environment-variable name, or any proxy value. With no detected configuration, omit this informational capability. The renderer may show only the fixed reason wording.
+
+Use check version `1.0.0`, network inputs, empty `required_capability_ids` lists, fixed deadlines, and expected result tokens: `RESOLVED`, `ACCEPTED`, `COMPLETED`, `PRESENTED`, `VERIFIED`, and `RESPONSE`.
 
 - [ ] **Step 4: Run topology/model validation tests**
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go test ./internal/clientprobe -run 'TestRetained|TestResolution|TestUnattempted|TestNoProbeMode|TestNormalOutside'
+GOTOOLCHAIN=go1.26.5 go test ./internal/clientprobe -run 'TestRetained|TestResolution|TestUnattempted|TestNoProbeMode|TestNormalOutside|TestProxyEnvironment'
 GOTOOLCHAIN=go1.26.5 go test ./internal/model ./internal/selection
 ```
 
@@ -421,7 +436,7 @@ git commit -m "feat: probe ordinary and pinned TCP paths"
 
 - [ ] **Step 1: Write failing TLS tests**
 
-Generate local CA/leaf certificates for valid, wrong-name, untrusted, expired, not-yet-valid, and invalid server usage. Add controlled plaintext, immediate-reset, and handshake-timeout servers.
+Generate local CA/leaf certificates for valid, wrong-name, untrusted, expired, not-yet-valid, and invalid server usage. Add controlled plaintext, immediate-reset, and handshake-timeout servers. Add a three-certificate chain in which the server presents leaf plus intermediate and the selected roots contain only the root CA.
 
 Assert:
 
@@ -430,6 +445,7 @@ Assert:
 - completed transport with a certificate may name the fingerprint peer;
 - peer summaries contain no SAN values or raw DER;
 - verification is a separate observation with `SYSTEM` or test `EXPLICIT` trust source;
+- a leaf signed by the presented intermediate verifies when only the root is trusted, while the same verification without that intermediate fails;
 - HTTP execution is skipped with `tls_peer_unverified` on every verification failure.
 
 - [ ] **Step 2: Run red TLS tests**
@@ -442,21 +458,28 @@ Expected: FAIL because TLS is not implemented.
 
 - [ ] **Step 3: Implement separated handshake, peer extraction, and verification**
 
-Perform `tls.Client(conn, &tls.Config{ServerName: hostname, InsecureSkipVerify: true})` and `HandshakeContext` under `tlsTimeout`. `InsecureSkipVerify` is used only to separate transport observation from verification; no connection reaches HTTP until explicit verification succeeds.
+Perform `tls.Client(conn, &tls.Config{ServerName: hostname, InsecureSkipVerify: true, NextProtos: []string{"http/1.1"}})` and `HandshakeContext` under `tlsTimeout`. `InsecureSkipVerify` is used only to separate transport observation from verification; no connection reaches HTTP until explicit verification succeeds.
 
-On transport completion, record protocol version, cipher suite, negotiated ALPN, SNI, duration, and the exact endpoint. If a leaf exists, compute `sha256:<lowercase hex DER digest>`, create one `TLS_PEER`, and emit bounded SAN summaries for DNS, IP, and OTHER counts without values. Run:
+On transport completion, record protocol version, cipher suite, negotiated ALPN, SNI, duration, and the exact endpoint. The HTTP/1-only ALPN configuration must agree with the handoff in Task 5. After a completed handshake, read `state := tlsConn.ConnectionState()`. When peer evidence exists, require `len(state.PeerCertificates) >= 1`, set `leaf := state.PeerCertificates[0]`, compute `sha256:<lowercase hex DER digest>`, create one `TLS_PEER`, and emit bounded SAN summaries for DNS, IP, and OTHER counts without values.
+
+Build the verification intermediates explicitly:
 
 ```go
-leaf.Verify(x509.VerifyOptions{
-	DNSName:       hostname,
-	Roots:         roots,
+intermediates := x509.NewCertPool()
+for _, cert := range state.PeerCertificates[1:] {
+	intermediates.AddCert(cert)
+}
+
+_, err := leaf.Verify(x509.VerifyOptions{
+	DNSName:       originalHostname,
+	Roots:         selectedRoots,
 	Intermediates: intermediates,
-	CurrentTime:   now.UTC(),
+	CurrentTime:   verificationTime,
 	KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 })
 ```
 
-Record the existing certificate result enum and failure reason. Verification failure returns a private sentinel to the HTTP layer, closes the connection, and produces `NOT_RUN/SKIPPED tls_peer_unverified`; never propagate the wrapped `url.Error` text.
+`originalHostname` is the normalized URL hostname retained for SNI/Host, `selectedRoots` is the injected explicit pool in tests or system roots in production, and `verificationTime` is the injected UTC clock value. Never assume the server sent its trust anchor and never add the leaf itself to intermediates. Record the existing certificate result enum and failure reason. Verification failure returns a private sentinel to the HTTP layer, closes the connection, and produces `NOT_RUN/SKIPPED tls_peer_unverified`; never propagate the wrapped `url.Error` text.
 
 Add path edges only when their facts exist: endpoint-to-peer `NEGOTIATES_TLS_WITH` on completed transport with a peer, and peer-to-hostname `VERIFIES` on verification. These edges cite only their direct observations.
 
@@ -491,7 +514,11 @@ git commit -m "feat: observe and verify TLS client paths"
 
 - [ ] **Step 1: Write failing HTTP tests**
 
-Use `httptest.Server`, `httptest.NewUnstartedServer`, and controlled handlers. Cover HTTP/HTTPS success, 401/403/404 satisfying `HTTP_RESPONSE`, Host preservation on pinned IP, fixed User-Agent, proxy environment ignored, no cookies/auth, no automatic decompression, oversized headers, large/streaming bodies, timeout, malformed response, and redirect destination request count remaining zero.
+Use `httptest.Server`, `httptest.NewUnstartedServer`, instrumented one-use dial callbacks, and controlled handlers. Cover HTTP/HTTPS success, 401/403/404 satisfying `HTTP_RESPONSE`, Host preservation on pinned IP, fixed User-Agent, proxy environment ignored, no cookies/auth, no automatic decompression, oversized headers, large/streaming bodies, timeout/cancellation, malformed response, and redirect destination request count remaining zero.
+
+Add separate red-first HTTP and HTTPS ownership tests. For each scheme assert exactly one underlying TCP dial, exactly one request at the server, no invocation of the deliberately failing unexpected-dial hook, and that the HTTP observation is branch-associated with the endpoint recorded from that same connection. For HTTPS additionally count exactly one TLS handshake and prove the HTTP transport never initiates a second handshake. Block a handler until cancellation to prove both the `httpTimeout` child deadline and cancellation of the earlier total-run parent terminate the request.
+
+For proxy detection, set a credential-bearing proxy URL in one injected relevant environment entry and run a separate counter/listener as the alleged proxy. Assert its accept/request count stays zero, the target's direct dial and request counts are one, and the validated report contains only `HTTP_PROBE / AVAILABLE / proxy_environment_detected_ignored`. Encode and render the report and assert that neither the proxy URL nor its credentials, hostname, unique port, complete value, or environment-variable name appears.
 
 ```go
 func TestRedirectIsObservedButNotFollowed(t *testing.T) {
@@ -513,9 +540,21 @@ Expected: FAIL because HTTP is not implemented.
 
 - [ ] **Step 3: Implement one bounded standard-library request per successful strategy**
 
-Use a fresh `http.Transport` per strategy with `Proxy: nil`, `DisableCompression: true`, `DisableKeepAlives: true`, `MaxResponseHeaderBytes: maxResponseHeaderBytes`, and the already-established connection supplied through a private one-use dial callback. Use no cookie jar. Set only the fixed RouteDoctor User-Agent and normal Go-required request fields; leave authorization and cookies absent. Preserve the parsed URL hostname/port in the request so Host remains correct while pinned dialing uses the IP.
+Use a fresh `http.Transport` per strategy with `Proxy: nil`, `DisableCompression: true`, `DisableKeepAlives: true`, and `MaxResponseHeaderBytes: maxResponseHeaderBytes`. Configure protocols explicitly for M1:
 
-Use `http.Client.CheckRedirect` returning `http.ErrUseLastResponse`; `redirectFollowCap` remains zero. Bound response-header waiting and body-prefix reading with `httpTimeout`; read at most `maxResponseBodyPrefix` bytes to `io.Discard`, then close. Body truncation does not fail `HTTP_RESPONSE` because content is outside the goal.
+```go
+protocols := new(http.Protocols)
+protocols.SetHTTP1(true)
+transport.Protocols = protocols // HTTP/1.x only; HTTP/2 and unencrypted HTTP/2 remain false
+```
+
+For plain HTTP, set `DialContext` to a synchronized one-use closure that returns exactly the already-established raw `net.Conn`; its second invocation returns a fixed internal error and performs no dial. Leave `DialTLSContext` unused.
+
+For HTTPS, set `DialTLSContext` to a synchronized one-use closure that returns exactly the already-handshaken and explicitly verified `*tls.Conn`. Set `DialContext` to a fixed unexpected-call error. Because a non-nil `DialTLSContext` returns a connection already past its TLS handshake, the transport must not redial, wrap it in another TLS layer, or redo verification.
+
+Use no cookie jar. Set only the fixed RouteDoctor User-Agent and normal Go-required request fields; leave authorization and cookies absent. Preserve the parsed URL hostname/port in the request so Host remains correct while pinned dialing uses the IP. Create the GET with a child request context whose deadline is `min(remaining total-run deadline, httpTimeout)`; derive it from the total-run context so parent cancellation immediately cancels the HTTP operation. There is exactly one `Client.Do` call per successful strategy and the one-use connection is always closed.
+
+Use `http.Client.CheckRedirect` returning `http.ErrUseLastResponse`; `redirectFollowCap` remains zero. Read at most `maxResponseBodyPrefix` bytes to `io.Discard`, then close. Body truncation does not fail `HTTP_RESPONSE` because content is outside the goal.
 
 Any final status is `HTTPResponse`, except a 3xx with a syntactically valid, credential-free, architecture-valid HTTP(S) `Location`, which is `HTTPRedirect` with a sanitized `Target` and a new `URL_TARGET` entity referenced by `redirect_target_entity_id`. Never add a `REDIRECTS_TO` edge or destination branch because the destination was not contacted. Malformed, unsupported, or credential-bearing Location data is not persisted.
 
@@ -527,7 +566,7 @@ Add a `REQUESTS_HTTP_FROM` edge supported by the HTTP observation. Never retain 
 GOTOOLCHAIN=go1.26.5 go test ./internal/clientprobe -run 'TestHTTP|TestRedirect|TestProxy|TestResponseBounds'
 ```
 
-Expected: PASS, including proof that verification failures delivered zero HTTP requests.
+Expected: PASS, including proof that verification failures delivered zero HTTP requests, HTTP and HTTPS each reused their one established connection, HTTPS performed only one handshake, and timeout/parent cancellation terminated the request.
 
 - [ ] **Step 5: Commit**
 
@@ -633,7 +672,7 @@ git commit -m "feat: evaluate deterministic client reports"
 
 - [ ] **Step 1: Write failing render tests**
 
-Assert concise output groups retained endpoint branches, prints typed stage/result and normalized reason, marks `address_attempt_cap`, prints unscoped normal failure separately, shows HTTP status, and labels rule-produced selected findings as primary blockers. Assert direct TLS/untrusted/timeout failures are not called findings or blockers.
+Assert concise output groups retained endpoint branches, prints typed stage/result and normalized reason, marks `address_attempt_cap`, prints unscoped normal failure separately, shows HTTP status, and labels rule-produced selected findings as primary blockers. Assert direct TLS/untrusted/timeout failures are not called findings or blockers. When the safe HTTP capability reason is present, concise and verbose output say only `Proxy environment detected and ignored; direct path probed.` and never identify its source variable or value.
 
 ```go
 func TestConciseSeparatesDirectFailureFromRuleBlocker(t *testing.T) {
@@ -658,7 +697,7 @@ Expected: FAIL because client-aware summaries do not exist.
 
 Build lookup maps for definitions, executions, entities, observations, and branches. Render branches in stored canonical order; identify endpoints from check inputs and path nodes, never attempt mode. Concise output includes stage, verdict, safe reason, endpoint, status, and selected blocker. Verbose adds check/execution/observation IDs and evidence refs already permitted by M0.
 
-For no rule-produced selection, say `No rule-produced primary finding.` rather than implying direct failed checks are successful. Render unscoped checks under `UNATTRIBUTED CHECKS`. Do not derive or print exit status in the renderer.
+For no rule-produced selection, say `No rule-produced primary finding.` rather than implying direct failed checks are successful. Render unscoped checks under `UNATTRIBUTED CHECKS`. Map only the exact fixed capability tuple `HTTP_PROBE / AVAILABLE / proxy_environment_detected_ignored` to the fixed safe proxy sentence; do not print arbitrary capability reason text as prose. Do not derive or print exit status in the renderer.
 
 - [ ] **Step 4: Run renderer and existing golden tests**
 
@@ -762,7 +801,7 @@ git commit -m "feat: diagnose URLs from the client vantage"
 
 - [ ] **Step 1: Add failing end-to-end acceptance and leakage assertions**
 
-Drive real loopback HTTP/TCP/TLS servers and fake only system resolution/clock where determinism requires it. Cover all approved cases: successful HTTP/HTTPS, refused, deterministic timeout/failure, TLS pre-certificate failures, hostname mismatch, untrusted/expired/not-yet-valid, HTTP suppression, header/body bounds, multiple retained addresses, normal outside retained, output permutation, redirect no-follow, proxy environment ignored, and maximum three GETs.
+Drive real loopback HTTP/TCP/TLS servers and fake only system resolution/clock/environment where determinism requires it. Cover all approved cases: successful HTTP/HTTPS, exactly one dial/request per strategy, exactly one HTTPS handshake, HTTP cancellation, refused, deterministic timeout/failure, TLS pre-certificate failures, the presented-intermediate chain, hostname mismatch, untrusted/expired/not-yet-valid, HTTP suppression, header/body bounds, multiple retained addresses, normal outside retained, output permutation, redirect no-follow, proxy environment detected-but-ignored with a zero-contact proxy listener, and maximum three GETs.
 
 Run every output form against a target such as:
 
@@ -770,7 +809,7 @@ Run every output form against a target such as:
 https://example.test/private/segment?token=do-not-persist#fragment
 ```
 
-Assert canonical JSON, concise, verbose, stderr, IDs, reason codes, and test goldens contain none of `private`, `segment`, `token`, `do-not-persist`, raw response data, `Authorization`, `Cookie`, `Set-Cookie`, or raw OS error text.
+Assert canonical JSON, concise, verbose, stderr, IDs, reason codes, and test goldens contain none of `private`, `segment`, `token`, `do-not-persist`, raw response data, `Authorization`, `Cookie`, `Set-Cookie`, raw OS error text, or the injected proxy URL/credentials/hostname/port/value/environment-variable name. Assert the fixed safe proxy-detected-and-ignored indication is present when applicable.
 
 - [ ] **Step 2: Run the acceptance tests red**
 
@@ -825,7 +864,8 @@ Verify explicitly:
 - check-only failures never cause exit `1`;
 - no new claim/finding/rule/schema value exists;
 - no Linux/Caddy/Docker/proxy/plugin/configuration machinery was added;
-- no secret-bearing transient value enters reports, logs, errors, IDs, or testdata.
+- proxy environment configuration is reduced to the one safe existing capability tuple, is never contacted, and never affects the direct dial;
+- no secret-bearing transient URL or proxy value enters reports, logs, errors, IDs, or testdata.
 
 - [ ] **Step 6: Commit the acceptance boundary**
 
@@ -843,7 +883,7 @@ After the commit, rerun `git diff --check` and `git status --short`; status must
 1. A retained address branch containing a supported `RESOLVES_TO` edge plus a branch-scoped skipped TCP execution validates without inventing an endpoint edge. Task 2 must prove this before transport code proceeds.
 2. The existing direct `URL_TARGET -> SOCKET_ENDPOINT / CONNECTS_TO` fixture pattern legitimately represents a normal-dial endpoint outside retained resolution when supported by its accepted TCP observation. Task 2 must stop for architecture review if model validation or rule positioning disproves this.
 3. On supported platforms, a successful normal TCP connection exposes an exact `*net.TCPAddr` through `RemoteAddr`; otherwise the safe fallback is an unscoped unknown execution, never guessed attribution.
-4. A one-use connection callback in `http.Transport` does not cause a second request/dial for one GET. Protocol tests must count dials and requests; if Go's transport behavior differs, use the smallest standard-library `RoundTripper` seam without changing persisted semantics.
+4. Go 1.26.5 `http.Transport` treats a connection returned by `DialTLSContext` as already handshaken and supports explicit HTTP/1-only `Protocols`. Protocol tests must still count calls and fail on any second dial, handshake, or request; do not replace this pinned ownership with a reusable transport abstraction.
 5. Resolver truncation can be represented with the existing run-scoped `partial_visibility` limitation and safe execution reason `resolution_result_cap`; no schema field is required.
 6. Existing selection marks only rule-produced observed/inferred blockers as branch/global primary. `Status` must consume that validated selection and must not reproduce selection logic from raw checks.
 7. Go's public TLS errors may not expose an alert code. Omitting optional `alert_code` is correct; string parsing is forbidden.
