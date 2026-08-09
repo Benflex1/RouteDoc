@@ -331,6 +331,9 @@ func assembleEvidence(f runFacts) model.EvidenceRun {
 }
 
 func fProducer(f runFacts) model.Producer {
+	if f.producer.Name != "" {
+		return f.producer
+	}
 	if f.target.requestURL != nil {
 		return model.Producer{Name: "routedoc", Version: "0.0.0-milestone1", Build: "development"}
 	}

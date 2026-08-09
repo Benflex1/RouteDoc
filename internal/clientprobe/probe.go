@@ -18,6 +18,7 @@ type dependencies struct {
 	dialContext func(context.Context, string, string) (net.Conn, error)
 	systemRoots func() (*x509.CertPool, error)
 	lookupEnv   func(string) (string, bool)
+	producer    model.Producer
 }
 
 type endpointKey struct {
@@ -76,6 +77,7 @@ type normalFact struct {
 
 type runFacts struct {
 	target       requestTarget
+	producer     model.Producer
 	started      time.Time
 	finished     time.Time
 	resolution   resolutionFacts
@@ -93,6 +95,7 @@ func defaultDependencies() dependencies {
 		now:         time.Now,
 		lookupNetIP: net.DefaultResolver.LookupNetIP,
 		dialContext: (&net.Dialer{}).DialContext,
+		systemRoots: x509.SystemCertPool,
 		lookupEnv:   os.LookupEnv,
 	}
 }
