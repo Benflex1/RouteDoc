@@ -2,9 +2,11 @@
 
 Status: authoritative design for V1
 
-Design version: 1.2
+Design version: 1.3
 
 Approved direction: 2026-08-08
+
+Revision 1.3 correction: 2026-08-09
 
 This document is the architectural source of truth for RouteDoctor V1. If a
 later implementation plan or code change conflicts with it, this document wins
@@ -622,10 +624,34 @@ or collector source payload.
 
 TLS is explicitly decomposed:
 
-1. `TLS_TRANSPORT_RESULT` records whether a TLS handshake completed and, when
-   available, the protocol version, cipher suite, negotiated ALPN, SNI sent,
-   alerts, and timing. Handshake completion proves cryptographic transport
-   negotiation, not peer identity.
+1. `TLS_TRANSPORT_RESULT` records whether a TLS handshake completed for one
+   exact attempted socket endpoint and, when available, the protocol version,
+   cipher suite, negotiated ALPN, SNI sent, alerts, and timing. Its closed
+   payload, in schema declaration order, is:
+
+   ```text
+   TLS_TRANSPORT_RESULT
+   - endpoint_entity_id
+   - peer_entity_id?
+   - result
+   - protocol_version
+   - cipher_suite
+   - negotiated_alpn
+   - sni_sent
+   - alert_code?
+   - duration_ns
+   ```
+
+   `endpoint_entity_id` is required for every result and MUST resolve to an
+   entity of kind `SOCKET_ENDPOINT`. `peer_entity_id` is optional; when
+   present, it MUST resolve to an entity of kind `TLS_PEER` whose identity was
+   derived from a presented certificate. A failed or timed-out handshake
+   before certificate presentation MUST omit `peer_entity_id` and MUST NOT
+   fabricate a sentinel fingerprint, placeholder peer, or endpoint-as-peer
+   identity. Failed and timed-out handshakes still produce direct
+   `TLS_TRANSPORT_RESULT` observations; a `CheckExecution` alone is not a
+   substitute. Handshake completion proves cryptographic transport
+   negotiation, not peer presentation or certificate validity.
 2. `TLS_PEER_SUMMARY` records minimal derived peer-certificate evidence such as
    certificate count, leaf SHA-256 fingerprint, relevant validity timestamps,
    and SAN type/count summaries. SAN values are not persisted by default;
@@ -641,6 +667,31 @@ TLS is explicitly decomposed:
    `tls_peer_unverified`. TLS transport and peer evidence remain reportable.
 
 V1 has no option to send ordinary HTTP over unverified TLS.
+
+The result-dependent cases are:
+
+- TCP success followed by a TLS timeout before certificate presentation names
+  the attempted endpoint, omits the peer, and is valid timed-out transport
+  evidence.
+- TCP success followed by a reset during the handshake names the attempted
+  endpoint, omits the peer when no certificate identity was obtained, and is
+  valid failed transport evidence.
+- A plaintext server on an HTTPS port produces a failed transport result for
+  the attempted endpoint and no fabricated peer.
+- When the handshake completes and a certificate is presented, the endpoint
+  remains required and the optional peer may identify the certificate-derived
+  `TLS_PEER`; peer summary and certificate verification remain separate
+  observations.
+- When certificate presentation succeeds but verification fails, transport
+  may be `COMPLETED`, the certificate-derived `TLS_PEER` exists and remains
+  reportable, verification separately records the failure, and HTTP remains
+  skipped.
+
+Semantic validation MUST reject `endpoint_entity_id` when it resolves to any
+entity kind other than `SOCKET_ENDPOINT`, and MUST reject a present
+`peer_entity_id` when it resolves to any entity kind other than `TLS_PEER`.
+Both failures use `reference.kind_mismatch`; the fact that all entity IDs share
+one lexical ID type does not permit cross-kind substitution.
 
 ### 7.11 Visibility assessment
 
@@ -920,8 +971,10 @@ Every implementation and report MUST preserve these invariants:
    relation is observed.
 3. **Temporal invariant:** observations include time; rules requiring a coherent
    snapshot enforce a documented maximum observation window.
-4. **TLS separation invariant:** TLS transport success, peer evidence, and
-   certificate verification are distinct. None implies another.
+4. **TLS separation invariant:** every TLS transport result is attributed to
+   the exact attempted socket endpoint. TLS transport success, peer evidence,
+   and certificate verification are distinct; none implies another. A
+   pre-certificate transport failure has no fabricated TLS peer.
 5. **Verified-HTTP invariant:** HTTPS application traffic is not sent after
    failed or unknown certificate verification in V1.
 6. **Absence invariant:** every negative conclusion based on inventory absence
@@ -1264,15 +1317,23 @@ Three versions are independent:
 - `producer.version`: RouteDoctor binary version;
 - rule and check versions: stable IDs described above.
 
-Architecture revision 1.2 corrects the initial report contract before
-Milestone 0 freeze. Report schema remains `1.0.0`: repository history contains
-an implementation, but Milestone 0 has not passed independent review and no
-Git tag, release, or stable external `1.0.0` contract exists. The new
-`LISTENER_INVENTORY_RESULT` kind is therefore part of the still-unreleased
-initial closed union rather than a post-release schema addition. After a
-`1.0.0` release, adding an observation kind would require the schema minor bump
-described below. This pre-release correction does not introduce support for a
-second report version.
+Architecture revision 1.2 corrected the listener-inventory gap before the
+initial Milestone 0 freeze. Architecture revision 1.3 narrowly reopens that
+internally frozen contract after Milestone 1 planning exposed a genuine TLS
+transport representation defect: pre-certificate handshake failures could not
+name their attempted endpoint without fabricating a certificate-derived peer.
+Revision 1.3 adds required endpoint attribution, makes peer attribution
+optional and certificate-dependent, and adds typed entity-kind validation.
+
+Report schema remains `1.0.0`. No Git tag, release, or stable public `1.0.0`
+report contract exists, so revisions 1.2 and 1.3 are corrections to the
+still-unreleased initial contract rather than post-release schema changes.
+After independent verification of revision 1.3 and its implementation,
+Milestone 0 is re-frozen. This exception does not weaken the compatibility
+policy below: after a public `1.0.0` release, adding a required field, changing
+requiredness, or changing typed-reference semantics requires the version change
+dictated by that policy. Writers and readers continue to support exactly one
+report version; this correction introduces no second-version projection.
 
 ### 15.2 Compatibility policy
 
@@ -1343,6 +1404,11 @@ serialization framework is required.
   `namespace_entity_id`, `protocol`, `address_family`, `bind_semantics`,
   `port_start`, `port_end`, `matching_listener_count`. Its payload contains no
   arrays, so it adds no collection-order rule.
+- The `TLS_TRANSPORT_RESULT` union member order after `kind` is exactly
+  `endpoint_entity_id`, `peer_entity_id`, `result`, `protocol_version`,
+  `cipher_suite`, `negotiated_alpn`, `sni_sent`, `alert_code`, `duration_ns`.
+  Optional absent members are omitted without changing the relative order of
+  members that remain.
 - Field names are `snake_case`. Typed IDs and enums use JSON strings; enum
   tokens are the exact uppercase tokens defined by the schema.
 - JSON string escaping follows Go `encoding/json` with HTML escaping disabled.
@@ -1639,8 +1705,19 @@ The implementation agent MUST deliver:
 13. Synthetic fixtures covering:
     - valid multi-branch reachability with no global finding;
     - IPv4 success and IPv6 failure with branch-local partial reachability;
-    - TLS transport success plus certificate verification failure and skipped
-      HTTP;
+    - TCP success followed independently by a TLS timeout and a reset before
+      certificate presentation, each with the exact socket endpoint, no peer,
+      and a direct failed or timed-out transport observation;
+    - a plaintext server on an HTTPS port represented as failed TLS transport
+      for the exact socket endpoint with no fabricated peer;
+    - TLS transport completion with a presented certificate, exact endpoint,
+      optional certificate-derived peer attribution, separate peer summary,
+      and separate successful verification;
+    - TLS transport completion plus certificate verification failure, retained
+      endpoint and peer evidence, and skipped HTTP;
+    - malicious cross-kind TLS references where `endpoint_entity_id` names a
+      `TLS_PEER` or `peer_entity_id` names a `SOCKET_ENDPOINT`, both rejected as
+      `reference.kind_mismatch`;
     - Caddy configured intent conflicting with active derived state;
     - refused upstream from a wrong vantage, which cannot justify the proxy
       namespace conclusion;
@@ -1788,6 +1865,16 @@ Milestone 0 is complete only when:
 - re-evaluation replaces all prior claims, findings, evaluation metadata, and
   selections, emits no duplicates, and reproduces deterministic generated IDs;
 - every network observation in fixtures has a valid typed vantage;
+- every TLS transport result names an existing `SOCKET_ENDPOINT`; a present
+  peer reference names an existing `TLS_PEER`, and either cross-kind
+  substitution is rejected as `reference.kind_mismatch`;
+- TLS timeout, reset, and plaintext-on-HTTPS failures before certificate
+  presentation are directly representable with exact endpoint attribution and
+  no peer, sentinel fingerprint, placeholder entity, or endpoint-as-peer
+  reinterpretation;
+- completed TLS with certificate presentation keeps transport, optional peer
+  attribution, peer summary, and verification separate; verification failure
+  retains sanitized transport/peer evidence and skips HTTP;
 - zero matching listeners are representable by a direct successful
   `LISTENER_INVENTORY_RESULT` with count zero and no fabricated positive
   listener entry;
@@ -1809,8 +1896,6 @@ Milestone 0 is complete only when:
   zero; requested ownership completeness for existing listeners counts
   distinct concrete listener identities rather than observation IDs and
   remains separately evidenced;
-- TLS verification failure retains sanitized transport/peer evidence and has a
-  skipped HTTP execution;
 - no fixture contains raw Caddy JSON, credentials, headers, secrets, URL query
   values, raw path segments, Caddy matcher values, Docker environment
   variables, raw certificate material, raw socket tables, command output,
