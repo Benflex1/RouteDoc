@@ -81,7 +81,13 @@ func reportClientConcise(w io.Writer, v model.ValidatedEvaluatedRun) error {
 			return err
 		}
 	}
-	if selected == 0 {
+	diagnoses := certificateDiagnoses(r.Evidence.Observations)
+	for _, diagnosis := range diagnoses {
+		if err := writeLine(w, diagnosis); err != nil {
+			return err
+		}
+	}
+	if selected == 0 && len(diagnoses) == 0 {
 		if err := writeLine(w, "No rule-produced primary finding."); err != nil {
 			return err
 		}
@@ -148,10 +154,61 @@ func executionSummary(execution model.CheckExecution, observations map[model.Obs
 	for _, id := range execution.ObservationIDs {
 		if observation, ok := observations[id]; ok && observation.Payload.HTTP != nil {
 			status = fmt.Sprintf(" status=%d", observation.Payload.HTTP.StatusCode)
+			if observation.Payload.HTTP.ResultKind == model.HTTPRedirect {
+				status += " redirect"
+				if observation.Payload.HTTP.RedirectTarget != nil {
+					status += " → " + redirectTargetText(*observation.Payload.HTTP.RedirectTarget)
+				}
+			}
 		}
 	}
 	if reason == "" {
 		return status
 	}
 	return " reason=" + reason + status
+}
+
+func redirectTargetText(t model.Target) string {
+	text := fmt.Sprintf("%s://%s:%d", t.Scheme, t.Hostname, t.EffectivePort)
+	if !t.Path.Present {
+		return text
+	}
+	if t.Path.IsRoot {
+		return text + "/"
+	}
+	return text + "/..."
+}
+
+func certificateDiagnoses(observations []model.Observation) []string {
+	seen := map[string]bool{}
+	var diagnoses []string
+	for _, observation := range observations {
+		if observation.Payload.CertificateVerification == nil {
+			continue
+		}
+		if diagnosis := certificateDiagnosis(observation.Payload.CertificateVerification.Result); diagnosis != "" && !seen[diagnosis] {
+			seen[diagnosis] = true
+			diagnoses = append(diagnoses, diagnosis)
+		}
+	}
+	return diagnoses
+}
+
+func certificateDiagnosis(result model.CertificateVerificationResult) string {
+	switch result {
+	case model.CertHostnameMismatch:
+		return "TLS certificate hostname mismatch."
+	case model.CertExpired:
+		return "TLS certificate is expired."
+	case model.CertNotYetValid:
+		return "TLS certificate is not yet valid."
+	case model.CertUntrustedIssuer:
+		return "TLS certificate is untrusted (issuer not trusted)."
+	case model.CertInvalidUsage:
+		return "TLS certificate has invalid usage."
+	case model.CertVerifierUnavailable:
+		return "TLS certificate verification was unavailable."
+	default:
+		return ""
+	}
 }
