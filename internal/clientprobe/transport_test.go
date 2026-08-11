@@ -2,8 +2,10 @@ package clientprobe
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -194,6 +196,38 @@ func TestTCPFactEndpointFormatting(t *testing.T) {
 
 func TestTLSValidatesPresentedLeafAndIntermediates(t *testing.T) {
 	fixture := newTLSFixture(t, "example.test", true)
+	if fixture.root == nil || fixture.intermediate == nil || fixture.leaf == nil {
+		t.Fatal("TLS fixture did not retain root, intermediate, and leaf certificates")
+	}
+	if err := fixture.root.CheckSignatureFrom(fixture.root); err != nil || !fixture.root.IsCA || !fixture.root.BasicConstraintsValid {
+		t.Fatalf("root is not a trusted self-signed CA: signature=%v is_ca=%t constraints=%t", err, fixture.root.IsCA, fixture.root.BasicConstraintsValid)
+	}
+	if err := fixture.intermediate.CheckSignatureFrom(fixture.root); err != nil {
+		t.Fatalf("intermediate is not signed by root: %v", err)
+	}
+	if !fixture.intermediate.IsCA || !fixture.intermediate.BasicConstraintsValid || !fixture.intermediate.MaxPathLenZero || fixture.intermediate.KeyUsage&x509.KeyUsageCertSign == 0 {
+		t.Fatalf("intermediate lacks valid CA constraints/key usage: %#v", fixture.intermediate)
+	}
+	if err := fixture.leaf.CheckSignatureFrom(fixture.intermediate); err != nil {
+		t.Fatalf("leaf is not signed by intermediate: %v", err)
+	}
+	if err := fixture.leaf.CheckSignatureFrom(fixture.root); err == nil {
+		t.Fatal("leaf is directly signed by root; fixture must contain a real intermediate")
+	}
+	if len(fixture.certificate.Certificate) != 2 ||
+		!bytes.Equal(fixture.certificate.Certificate[0], fixture.leaf.Raw) ||
+		!bytes.Equal(fixture.certificate.Certificate[1], fixture.intermediate.Raw) {
+		t.Fatal("server must present leaf followed by intermediate, without root")
+	}
+	if bytes.Equal(fixture.certificate.Certificate[1], fixture.root.Raw) {
+		t.Fatal("server must not present the trusted root")
+	}
+	if subjects := fixture.roots.Subjects(); len(subjects) != 1 || !bytes.Equal(subjects[0], fixture.root.RawSubject) {
+		t.Fatal("verification roots must contain only the trusted root")
+	}
+	if len(fixture.leaf.ExtKeyUsage) != 1 || fixture.leaf.ExtKeyUsage[0] != x509.ExtKeyUsageServerAuth || len(fixture.leaf.DNSNames) != 1 || fixture.leaf.DNSNames[0] != "example.test" {
+		t.Fatal("leaf is not a server-auth certificate for example.test")
+	}
 	client, server := net.Pipe()
 	go fixture.serve(server)
 	fact := executeTLS(context.Background(), endpointKey{address: netip.MustParseAddr("192.0.2.1"), port: 443}, "example.test", client, fixture.roots, model.TrustExplicit, time.Now)

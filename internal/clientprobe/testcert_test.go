@@ -13,30 +13,64 @@ import (
 )
 
 type tlsFixture struct {
-	certificate tls.Certificate
-	roots       *x509.CertPool
-	serverName  string
+	certificate  tls.Certificate
+	roots        *x509.CertPool
+	serverName   string
+	root         *x509.Certificate
+	intermediate *x509.Certificate
+	leaf         *x509.Certificate
 }
 
-func newTLSFixture(t *testing.T, serverName string, rootsIncludeLeaf bool) *tlsFixture {
+func newTLSFixture(t *testing.T, serverName string, rootsIncludeRoot bool) *tlsFixture {
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Second)
-	return newTLSFixtureWithValidity(t, serverName, rootsIncludeLeaf, now, now.Add(-time.Hour), now.Add(24*time.Hour))
+	return newTLSFixtureWithValidity(t, serverName, rootsIncludeRoot, now, now.Add(-time.Hour), now.Add(24*time.Hour))
 }
 
-func newTLSFixtureWithValidity(t *testing.T, serverName string, rootsIncludeLeaf bool, now, leafNotBefore, leafNotAfter time.Time) *tlsFixture {
+func newTLSFixtureWithValidity(t *testing.T, serverName string, rootsIncludeRoot bool, now, leafNotBefore, leafNotAfter time.Time) *tlsFixture {
 	t.Helper()
 	now = now.UTC().Truncate(time.Second)
-	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	rootKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	caTemplate := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "RouteDoctor Test CA"}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature}
-	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	rootTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "RouteDoctor Test Root"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+	}
+	rootDER, err := x509.CreateCertificate(rand.Reader, rootTemplate, rootTemplate, &rootKey.PublicKey, rootKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	caCert, err := x509.ParseCertificate(caDER)
+	rootCert, err := x509.ParseCertificate(rootDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intermediateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intermediateTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "RouteDoctor Test Intermediate"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		MaxPathLen:            0,
+		MaxPathLenZero:        true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+	}
+	intermediateDER, err := x509.CreateCertificate(rand.Reader, intermediateTemplate, rootCert, &intermediateKey.PublicKey, rootKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intermediateCert, err := x509.ParseCertificate(intermediateDER)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,8 +78,8 @@ func newTLSFixtureWithValidity(t *testing.T, serverName string, rootsIncludeLeaf
 	if err != nil {
 		t.Fatal(err)
 	}
-	leafTemplate := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: serverName}, DNSNames: []string{serverName}, NotBefore: leafNotBefore.UTC(), NotAfter: leafNotAfter.UTC(), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
-	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, caCert, &leafKey.PublicKey, caKey)
+	leafTemplate := &x509.Certificate{SerialNumber: big.NewInt(3), Subject: pkix.Name{CommonName: serverName}, DNSNames: []string{serverName}, NotBefore: leafNotBefore.UTC(), NotAfter: leafNotAfter.UTC(), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, intermediateCert, &leafKey.PublicKey, intermediateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,12 +87,12 @@ func newTLSFixtureWithValidity(t *testing.T, serverName string, rootsIncludeLeaf
 	if err != nil {
 		t.Fatal(err)
 	}
-	cert := tls.Certificate{Certificate: [][]byte{leafDER, caDER}, PrivateKey: leafKey, Leaf: leafCert}
+	cert := tls.Certificate{Certificate: [][]byte{leafDER, intermediateDER}, PrivateKey: leafKey, Leaf: leafCert}
 	roots := x509.NewCertPool()
-	if rootsIncludeLeaf {
-		roots.AddCert(caCert)
+	if rootsIncludeRoot {
+		roots.AddCert(rootCert)
 	}
-	return &tlsFixture{certificate: cert, roots: roots, serverName: serverName}
+	return &tlsFixture{certificate: cert, roots: roots, serverName: serverName, root: rootCert, intermediate: intermediateCert, leaf: leafCert}
 }
 
 func (f *tlsFixture) serve(conn net.Conn) {
