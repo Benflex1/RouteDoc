@@ -88,3 +88,7 @@ Use `--verbose` for additional evidence context. Use `--json` when another tool 
 RouteDoctor diagnoses from the machine where it is run. It intentionally is not traceroute, packet capture, a vulnerability scanner, or an exhaustive network-analysis framework.
 
 Contributors who need the detailed model and design constraints can read [docs/architecture.md](docs/architecture.md).
+
+## License
+
+RouteDoctor is licensed under the [MIT License](LICENSE).
