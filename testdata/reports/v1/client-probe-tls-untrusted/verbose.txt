@@ -10,7 +10,7 @@ ENDPOINT BRANCHES
   CHECK HTTP: NOT_RUN SKIPPED reason=tls_peer_unverified
 UNATTRIBUTED CHECK SYSTEM_RESOLUTION: COMPLETED/PASS reason=
 UNATTRIBUTED CHECK TCP_CONNECTION: NOT_RUN/SKIPPED reason=resolution_failed
-No rule-produced primary finding.
+TLS certificate is untrusted (issuer not trusted).
 CLIENT CHECK EVIDENCE
 - execution-000001 check=check-000001 lifecycle=COMPLETED verdict=PASS reason= observations=[]
 - execution-000002 check=check-000002 lifecycle=NOT_RUN verdict=SKIPPED reason=resolution_failed observations=[]

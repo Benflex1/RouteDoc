@@ -542,6 +542,9 @@ func TestRedirectIsObservedButNotFollowed(t *testing.T) {
 	if fact.resultKind != model.HTTPRedirect || fact.redirectTarget == nil || fact.redirectTarget.Path.QueryPresent != true {
 		t.Fatalf("redirect fact = %#v", fact)
 	}
+	if fact.requestCalls != 1 {
+		t.Fatalf("redirect request calls = %d, want 1", fact.requestCalls)
+	}
 	if strings.Contains(fmt.Sprint(fact), "private") || strings.Contains(fmt.Sprint(fact), "secret") {
 		t.Fatal("redirect fact retained raw URL data")
 	}
