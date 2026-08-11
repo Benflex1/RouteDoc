@@ -3,6 +3,8 @@ package render
 import (
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"strings"
 
 	"routedoc/internal/model"
@@ -96,7 +98,17 @@ func reportClientConcise(w io.Writer, v model.ValidatedEvaluatedRun) error {
 		}
 	}
 	if selected == 0 && len(diagnoses) == 0 {
-		if err := writeLine(w, "No rule-produced primary finding."); err != nil {
+		statuses := httpResponseStatuses(r.Evidence.Observations)
+		if len(statuses) > 0 {
+			if err := writeLine(w, "Service is reachable."); err != nil {
+				return err
+			}
+			for _, status := range statuses {
+				if err := writeLine(w, fmt.Sprintf("HTTP %d received.", status)); err != nil {
+					return err
+				}
+			}
+		} else if err := writeLine(w, "No rule-produced primary finding."); err != nil {
 			return err
 		}
 	}
@@ -117,7 +129,18 @@ func reportClientConcise(w io.Writer, v model.ValidatedEvaluatedRun) error {
 }
 
 func clientTargetText(t model.Target) string {
-	return fmt.Sprintf("%s://%s:%d (path_present=%t root=%t count=%d trailing_slash=%t query_present=%t)", t.Scheme, t.Hostname, t.EffectivePort, t.Path.Present, t.Path.IsRoot, t.Path.SegmentCount, t.Path.TrailingSlash, t.Path.QueryPresent)
+	authority := t.Hostname
+	if strings.Contains(authority, ":") {
+		authority = "[" + authority + "]"
+	}
+	if !((t.Scheme == "http" && t.EffectivePort == 80) || (t.Scheme == "https" && t.EffectivePort == 443)) {
+		authority += ":" + strconv.Itoa(int(t.EffectivePort))
+	}
+	path := "/"
+	if t.Path.Present && !t.Path.IsRoot {
+		path = "/..."
+	}
+	return fmt.Sprintf("%s://%s%s", t.Scheme, authority, path)
 }
 
 func reportClientVerbose(w io.Writer, v model.ValidatedEvaluatedRun) error {
@@ -125,6 +148,9 @@ func reportClientVerbose(w io.Writer, v model.ValidatedEvaluatedRun) error {
 		return err
 	}
 	r := v.Value()
+	if err := writeLine(w, fmt.Sprintf("Target details: PathSummary present=%t root=%t segments=%d trailing_slash=%t query_present=%t", r.Evidence.Target.Path.Present, r.Evidence.Target.Path.IsRoot, r.Evidence.Target.Path.SegmentCount, r.Evidence.Target.Path.TrailingSlash, r.Evidence.Target.Path.QueryPresent)); err != nil {
+		return err
+	}
 	if err := writeLine(w, "CLIENT CHECK EVIDENCE"); err != nil {
 		return err
 	}
@@ -153,7 +179,20 @@ func branchEndpoint(branchID model.BranchID, executions []model.CheckExecution, 
 }
 
 func endpointDisplay(endpoint *model.EndpointIdentity) string {
-	return fmt.Sprintf("%s:%d", endpoint.Address, endpoint.Port)
+	return net.JoinHostPort(endpoint.Address.String(), strconv.Itoa(int(endpoint.Port)))
+}
+
+func httpResponseStatuses(observations []model.Observation) []uint16 {
+	seen := map[uint16]bool{}
+	var statuses []uint16
+	for _, observation := range observations {
+		if observation.Payload.HTTP == nil || !observation.Payload.HTTP.ResultKind.Valid() || seen[observation.Payload.HTTP.StatusCode] {
+			continue
+		}
+		seen[observation.Payload.HTTP.StatusCode] = true
+		statuses = append(statuses, observation.Payload.HTTP.StatusCode)
+	}
+	return statuses
 }
 
 func executionSummary(execution model.CheckExecution, observations map[model.ObservationID]model.Observation) string {

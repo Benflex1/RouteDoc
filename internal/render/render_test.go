@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,6 +102,102 @@ func TestClientReportExplainsUntrustedCertificateWithoutPrimaryFinding(t *testin
 	}
 	if strings.Contains(concise.String(), "No rule-produced primary finding.") {
 		t.Fatalf("direct diagnosis was overshadowed by no-finding message: %q", concise.String())
+	}
+}
+
+func TestClientReportConcludesReachableHTTP200(t *testing.T) {
+	v := loadRenderFixture(t, "client-probe-http-success")
+	var concise bytes.Buffer
+	if err := Report(&concise, v, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	output := concise.String()
+	if !strings.Contains(output, "Service is reachable.\nHTTP 200 received.") {
+		t.Fatalf("reachable conclusion missing: %q", output)
+	}
+	if strings.Contains(output, "No rule-produced primary finding.") {
+		t.Fatalf("internal no-finding conclusion remained: %q", output)
+	}
+}
+
+func TestClientReportConcludesReachableHTTP401WithoutClaimingApplicationHealth(t *testing.T) {
+	r := loadRenderFixtureRun(t, "client-probe-http-success")
+	for i := range r.Evidence.Observations {
+		if r.Evidence.Observations[i].Payload.HTTP != nil {
+			r.Evidence.Observations[i].Payload.HTTP.StatusCode = 401
+		}
+	}
+	v, issues := model.ValidatePersistedEvaluatedRun(r)
+	if len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	var concise bytes.Buffer
+	if err := Report(&concise, v, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	output := concise.String()
+	if !strings.Contains(output, "Service is reachable.\nHTTP 401 received.") {
+		t.Fatalf("reachable 401 conclusion missing: %q", output)
+	}
+	if strings.Contains(output, "healthy") || strings.Contains(output, "successful") {
+		t.Fatalf("application health was overstated: %q", output)
+	}
+}
+
+func TestClientReportHidesTargetMetadataInConciseAndRetainsItInVerbose(t *testing.T) {
+	v := loadRenderFixture(t, "client-probe-http-success")
+	var concise bytes.Buffer
+	if err := Report(&concise, v, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(concise.String(), "path_present=") || strings.Contains(concise.String(), "segment_count=") || strings.Contains(concise.String(), "trailing_slash=") {
+		t.Fatalf("internal target metadata leaked into concise output: %q", concise.String())
+	}
+	if !strings.Contains(concise.String(), "Target: http://example.test/") {
+		t.Fatalf("human target missing: %q", concise.String())
+	}
+
+	var verbose bytes.Buffer
+	if err := Report(&verbose, v, Options{Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(verbose.String(), "PathSummary") && !strings.Contains(verbose.String(), "path_present=") {
+		t.Fatalf("verbose target detail missing: %q", verbose.String())
+	}
+}
+
+func TestClientReportUsesBracketedIPv6Endpoint(t *testing.T) {
+	r := loadRenderFixtureRun(t, "client-probe-http-success")
+	for i := range r.Evidence.Entities {
+		if r.Evidence.Entities[i].Identity.Endpoint != nil {
+			r.Evidence.Entities[i].Identity.Endpoint.Address = netip.MustParseAddr("2001:db8::1")
+		}
+	}
+	v, issues := model.ValidatePersistedEvaluatedRun(r)
+	if len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	var concise bytes.Buffer
+	if err := Report(&concise, v, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	output := concise.String()
+	if !strings.Contains(output, "endpoint=[2001:db8::1]:80") {
+		t.Fatalf("bracketed IPv6 endpoint missing: %q", output)
+	}
+	if strings.Contains(output, "endpoint=2001:db8::1:80") {
+		t.Fatalf("ambiguous IPv6 endpoint remained: %q", output)
+	}
+}
+
+func TestClientReportKeepsConnectionRefusedFinding(t *testing.T) {
+	v := loadRenderFixture(t, "client-probe-unattempted-address")
+	var concise bytes.Buffer
+	if err := Report(&concise, v, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(concise.String(), "PRIMARY [BRANCH_PRIMARY] TCP connection refused from this vantage") {
+		t.Fatalf("connection-refused conclusion changed: %q", concise.String())
 	}
 }
 

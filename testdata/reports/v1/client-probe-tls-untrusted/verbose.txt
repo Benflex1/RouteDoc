@@ -1,5 +1,5 @@
 RouteDoctor client probe report
-Target: https://example.test:443 (path_present=true root=true count=0 trailing_slash=false query_present=false)
+Target: https://example.test/
 Vantages: 1  Endpoint branches: 1
 ENDPOINT BRANCHES
 - branch-000001 endpoint=192.0.2.1:443
@@ -11,6 +11,7 @@ ENDPOINT BRANCHES
 UNATTRIBUTED CHECK SYSTEM_RESOLUTION: COMPLETED/PASS reason=
 UNATTRIBUTED CHECK TCP_CONNECTION: NOT_RUN/SKIPPED reason=resolution_failed
 TLS certificate is untrusted (issuer not trusted).
+Target details: PathSummary present=true root=true segments=0 trailing_slash=false query_present=false
 CLIENT CHECK EVIDENCE
 - execution-000001 check=check-000001 lifecycle=COMPLETED verdict=PASS reason= observations=[]
 - execution-000002 check=check-000002 lifecycle=NOT_RUN verdict=SKIPPED reason=resolution_failed observations=[]
