@@ -104,6 +104,22 @@ func TestClientReportExplainsUntrustedCertificateWithoutPrimaryFinding(t *testin
 	}
 }
 
+func TestClientReportDetectionDoesNotDependOnProducerVersion(t *testing.T) {
+	r := loadRenderFixtureRun(t, "client-probe-http-success")
+	r.Evidence.Producer.Version = "0.1.0"
+	v, issues := model.ValidatePersistedEvaluatedRun(r)
+	if len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	var concise bytes.Buffer
+	if err := Report(&concise, v, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(concise.String(), "RouteDoctor client probe report") {
+		t.Fatalf("release-version client report used the wrong renderer: %q", concise.String())
+	}
+}
+
 func TestClientReportLabelsRedirectWithSanitizedDestination(t *testing.T) {
 	r := loadRenderFixtureRun(t, "client-probe-http-success")
 	for i := range r.Evidence.Observations {

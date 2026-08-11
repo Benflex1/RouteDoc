@@ -1,7 +1,8 @@
 package main
 
-const (
-	ProducerName    = "routedoc"
-	ProducerVersion = "0.0.0-milestone1"
+const ProducerName = "routedoc"
+
+var (
+	ProducerVersion = "dev"
 	ProducerBuild   = "development"
 )
