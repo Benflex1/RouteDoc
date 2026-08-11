@@ -1,4 +1,4 @@
-# Milestone 0 report fixture manifest
+# RouteDoctor report fixture manifest
 
 These are immutable, synthetic, sanitized report-contract fixtures. No case
 contains production captures, raw URLs, request paths, query values, headers,
@@ -24,6 +24,9 @@ credentials, Caddy source, Docker environment, or certificate material.
 | `reevaluation-replacement-before` / `after` | recomputational replacement and IDs |
 | `path-summary-only` | sanitized PathSummary |
 | `sensitive-derived-only` | minimized typed derived evidence |
+| `client-probe-http-success` | bounded client HTTP response and endpoint topology |
+| `client-probe-tls-untrusted` | TLS peer summary with explicit untrusted verification |
+| `client-probe-unattempted-address` | retained endpoint with explicit skipped attempt |
 | `exact-unknown-field-invalid` | strict exact decoding |
 | `newer-minor-ignored-fields` | read-only compatibility warnings |
 | `newer-patch-known-readonly` | known newer-patch read-only compatibility |

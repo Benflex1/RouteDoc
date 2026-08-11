@@ -1,0 +1,19 @@
+RouteDoctor client probe report
+Target: http://example.test:80 (path_present=true root=true count=0 trailing_slash=false query_present=false)
+Vantages: 1  Endpoint branches: 2
+ENDPOINT BRANCHES
+- branch-000001 endpoint=192.0.2.1:80
+  CHECK TCP_CONNECTION: COMPLETED FAIL reason=connection_refused
+  CHECK TLS_TRANSPORT: NOT_RUN SKIPPED reason=skipped_dependency
+  CHECK TLS_PEER: NOT_RUN SKIPPED reason=skipped_dependency
+  CHECK CERTIFICATE_VERIFICATION: NOT_RUN SKIPPED reason=skipped_dependency
+  CHECK HTTP: NOT_RUN SKIPPED reason=skipped_dependency
+- branch-000002 endpoint=192.0.2.2:80
+  CHECK TCP_CONNECTION: NOT_RUN SKIPPED reason=address_attempt_cap
+  CHECK TLS_TRANSPORT: NOT_RUN SKIPPED reason=skipped_dependency
+  CHECK TLS_PEER: NOT_RUN SKIPPED reason=skipped_dependency
+  CHECK CERTIFICATE_VERIFICATION: NOT_RUN SKIPPED reason=skipped_dependency
+  CHECK HTTP: NOT_RUN SKIPPED reason=skipped_dependency
+UNATTRIBUTED CHECK SYSTEM_RESOLUTION: COMPLETED/PASS reason=
+UNATTRIBUTED CHECK TCP_CONNECTION: NOT_RUN/SKIPPED reason=resolution_failed
+PRIMARY [BRANCH_PRIMARY] TCP connection refused from this vantage

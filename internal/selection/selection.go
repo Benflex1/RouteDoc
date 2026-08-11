@@ -64,13 +64,32 @@ func Apply(in model.EvaluatedRun) (model.EvaluatedRun, model.ValidationIssues) {
 			}
 		}
 		sort.Slice(at, func(i, j int) bool { return lessFinding(out.Findings[at[i].index], out.Findings[at[j].index]) })
-		observed := hasObservedEquivalent(at, out.Findings)
+		selected := make([]candidate, 0, len(at))
 		for _, c := range at {
-			if observed && out.Findings[c.index].Level == model.ClaimLevelInferred && sameStatement(out.Findings[c.index], out.Findings[at[0].index]) {
+			observedEquivalent := false
+			for _, other := range at {
+				if out.Findings[other.index].Level == model.ClaimLevelObserved && sameStatement(out.Findings[c.index], out.Findings[other.index], out.Claims) {
+					observedEquivalent = true
+					break
+				}
+			}
+			if observedEquivalent && out.Findings[c.index].Level != model.ClaimLevelObserved {
+				out.Findings[c.index].Selection = model.SelectionAdditional
+				continue
+			}
+			duplicate := false
+			for _, previous := range selected {
+				if sameStatement(out.Findings[c.index], out.Findings[previous.index], out.Claims) {
+					duplicate = true
+					break
+				}
+			}
+			if duplicate {
 				out.Findings[c.index].Selection = model.SelectionAdditional
 				continue
 			}
 			out.Findings[c.index].Selection = model.SelectionBranchPrimary
+			selected = append(selected, c)
 		}
 	}
 
@@ -147,20 +166,59 @@ func branchEdgeCount(v []model.Branch, id model.BranchID) uint64 {
 	}
 	return 0
 }
-func sameStatement(a, b model.Finding) bool { return a.Kind == b.Kind && a.TitleCode == b.TitleCode }
+func sameStatement(a, b model.Finding, claims []model.Claim) bool {
+	if a.Kind != b.Kind || a.TitleCode != b.TitleCode || len(a.ClaimIDs) != len(b.ClaimIDs) {
+		return false
+	}
+	if len(a.ClaimIDs) == 0 {
+		return true
+	}
+	for i := range a.ClaimIDs {
+		first, firstOK := claimByID(claims, a.ClaimIDs[i])
+		second, secondOK := claimByID(claims, b.ClaimIDs[i])
+		if !firstOK || !secondOK || !sameClaimProposition(first, second) {
+			return false
+		}
+	}
+	return true
+}
+
+func claimByID(claims []model.Claim, id model.ClaimID) (model.Claim, bool) {
+	for _, claim := range claims {
+		if claim.ClaimID == id {
+			return claim, true
+		}
+	}
+	return model.Claim{}, false
+}
+
+func sameClaimProposition(a, b model.Claim) bool {
+	if a.StatementCode != b.StatementCode || a.Parameters.Kind != b.Parameters.Kind {
+		return false
+	}
+	switch a.Parameters.Kind {
+	case model.StatementTCPConnectionRefused:
+		if a.Parameters.TCPRefused == nil || b.Parameters.TCPRefused == nil {
+			return false
+		}
+		return a.Parameters.TCPRefused.EndpointEntityID == b.Parameters.TCPRefused.EndpointEntityID && a.Parameters.TCPRefused.VantageID == b.Parameters.TCPRefused.VantageID
+	case model.StatementTLSCertificateHostnameMismatch:
+		if a.Parameters.HostnameMismatch == nil || b.Parameters.HostnameMismatch == nil {
+			return false
+		}
+		return a.Parameters.HostnameMismatch.PeerEntityID == b.Parameters.HostnameMismatch.PeerEntityID && a.Parameters.HostnameMismatch.Hostname == b.Parameters.HostnameMismatch.Hostname && a.Parameters.HostnameMismatch.TrustSource == b.Parameters.HostnameMismatch.TrustSource
+	case model.StatementNoMatchingListenerVisible:
+		if a.Parameters.ListenerAbsent == nil || b.Parameters.ListenerAbsent == nil {
+			return false
+		}
+		return *a.Parameters.ListenerAbsent == *b.Parameters.ListenerAbsent
+	default:
+		return a.ClaimID == b.ClaimID
+	}
+}
 func lessFinding(a, b model.Finding) bool {
 	if a.RuleID != b.RuleID {
 		return a.RuleID < b.RuleID
 	}
 	return model.CompareFindingID(a.FindingID, b.FindingID) < 0
-}
-func hasObservedEquivalent(v []candidate, findings []model.Finding) bool {
-	for _, a := range v {
-		for _, b := range v {
-			if findings[a.index].Level == model.ClaimLevelObserved && sameStatement(findings[a.index], findings[b.index]) {
-				return true
-			}
-		}
-	}
-	return false
 }

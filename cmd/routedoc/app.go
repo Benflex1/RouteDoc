@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
+	"routedoc/internal/clientprobe"
 	"routedoc/internal/model"
 	"routedoc/internal/render"
 	"routedoc/internal/schema/v1"
@@ -12,6 +15,7 @@ import (
 
 const (
 	ExitOK       = 0
+	ExitBlocked  = 1
 	ExitData     = 2
 	ExitUsage    = 3
 	ExitInternal = 4
@@ -23,6 +27,7 @@ type App struct {
 	Stdout   io.Writer
 	Stderr   io.Writer
 	ReadFile func(string) ([]byte, error)
+	Diagnose func(context.Context, string, model.Producer) (model.ValidatedEvaluatedRun, error)
 }
 
 func NewApp(args []string, in io.Reader, out, err io.Writer, read func(string) ([]byte, error)) *App {
@@ -38,7 +43,7 @@ func NewApp(args []string, in io.Reader, out, err io.Writer, read func(string) (
 	if read == nil {
 		read = os.ReadFile
 	}
-	return &App{Args: args, Stdin: in, Stdout: out, Stderr: err, ReadFile: read}
+	return &App{Args: args, Stdin: in, Stdout: out, Stderr: err, ReadFile: read, Diagnose: clientprobe.Diagnose}
 }
 func (a *App) Run() int {
 	if len(a.Args) == 0 {
@@ -54,7 +59,7 @@ func (a *App) Run() int {
 	case "version":
 		return a.version()
 	default:
-		return a.usage("unknown command")
+		return a.probe()
 	}
 }
 func (a *App) usage(msg string) int {
@@ -63,7 +68,51 @@ func (a *App) usage(msg string) int {
 	fmt.Fprintln(a.Stderr, "       routedoc explain REPORT.json FINDING_ID [--json]")
 	fmt.Fprintln(a.Stderr, "       routedoc validate REPORT.json [--json]")
 	fmt.Fprintln(a.Stderr, "       routedoc version [--json]")
+	fmt.Fprintln(a.Stderr, "       routedoc URL [--verbose] [--json]")
 	return ExitUsage
+}
+
+func (a *App) probe() int {
+	rawURL, verbose, jsonOut, ok := parseProbeArgs(a.Args)
+	if !ok {
+		return a.usage("invalid URL arguments")
+	}
+	if a.Diagnose == nil {
+		return a.internalOutput()
+	}
+	v, err := a.Diagnose(context.Background(), rawURL, model.Producer{Name: ProducerName, Version: ProducerVersion, Build: ProducerBuild})
+	if err != nil {
+		var input *clientprobe.InputError
+		if errors.As(err, &input) {
+			fmt.Fprintln(a.Stderr, input.Code)
+			return ExitUsage
+		}
+		return a.internalOutput()
+	}
+	if jsonOut {
+		b, issues := v1.EncodeCanonical(v)
+		if len(issues) > 0 {
+			return a.internalOutput()
+		}
+		if _, err := a.Stdout.Write(b); err != nil {
+			return ExitInternal
+		}
+	} else if err := render.Report(a.Stdout, v, render.Options{Verbose: verbose}); err != nil {
+		return ExitInternal
+	}
+	switch clientprobe.Status(v) {
+	case clientprobe.StatusSatisfied:
+		return ExitOK
+	case clientprobe.StatusBlocked:
+		return ExitBlocked
+	default:
+		return ExitData
+	}
+}
+
+func (a *App) internalOutput() int {
+	fmt.Fprintln(a.Stderr, "internal_error")
+	return ExitInternal
 }
 func (a *App) read(path string, op v1.Operation) (v1.DecodedReport, model.ValidatedEvaluatedRun, model.ValidationIssues, int) {
 	if path == "-" {

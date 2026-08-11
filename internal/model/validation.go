@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"sort"
 	"strings"
 	"unicode"
@@ -114,6 +115,12 @@ func ValidateScalar(s string) error {
 }
 
 func validateHostname(s string) error {
+	if address, err := netip.ParseAddr(s); err == nil {
+		if address.String() == s {
+			return nil
+		}
+		return errors.New("IP literal must be normalized")
+	}
 	if s == "" || len(s) > 253 || strings.ToLower(s) != s {
 		return errors.New("hostname must be a normalized lowercase hostname")
 	}

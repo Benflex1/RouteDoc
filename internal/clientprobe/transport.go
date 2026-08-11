@@ -1,0 +1,357 @@
+package clientprobe
+
+import (
+	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/netip"
+	"net/url"
+	"sort"
+	"strconv"
+	"sync"
+	"time"
+
+	"routedoc/internal/model"
+)
+
+func executeTCPStrategies(totalCtx, _ context.Context, target requestTarget, plans []endpointPlan, dial func(context.Context, string, string) (net.Conn, error), now func() time.Time) []tcpFact {
+	if len(plans) == 0 {
+		return []tcpFact{}
+	}
+	if dial == nil {
+		dial = (&net.Dialer{}).DialContext
+	}
+	if now == nil {
+		now = time.Now
+	}
+	type strategy struct {
+		mode     attemptMode
+		endpoint endpointKey
+		address  string
+	}
+	strategies := []strategy{{mode: modeNormal, endpoint: endpointKey{port: target.persisted.EffectivePort}, address: net.JoinHostPort(target.persisted.Hostname, strconv.Itoa(int(target.persisted.EffectivePort)))}}
+	for _, family := range []bool{true, false} {
+		for _, p := range plans {
+			if p.pinned && p.key.address.Is4() == family {
+				strategies = append(strategies, strategy{mode: modePinned, endpoint: p.key, address: net.JoinHostPort(p.key.address.String(), strconv.Itoa(int(p.key.port)))})
+				break
+			}
+		}
+	}
+	if len(strategies) > maxConcurrentStrategies {
+		strategies = strategies[:maxConcurrentStrategies]
+	}
+	results := make(chan tcpFact, len(strategies))
+	for _, s := range strategies {
+		go func(s strategy) {
+			started := now().UTC()
+			ctx, cancel := context.WithTimeout(totalCtx, tcpTimeout)
+			conn, err := dial(ctx, "tcp", s.address)
+			cancel()
+			finished := now().UTC()
+			if finished.Before(started) {
+				finished = started
+			}
+			if err != nil {
+				result, reason := normalizeTCPError(err)
+				results <- tcpFact{mode: s.mode, endpoint: s.endpoint, result: result, reason: reason, durationNS: finished.Sub(started).Nanoseconds(), started: started, finished: finished, exact: s.mode == modePinned}
+				return
+			}
+			remote, ok := exactRemoteEndpoint(conn)
+			if !ok {
+				_ = conn.Close()
+				reason := "normal_endpoint_unknown"
+				if s.mode == modePinned {
+					reason = "pinned_endpoint_unknown"
+				}
+				results <- tcpFact{mode: s.mode, endpoint: s.endpoint, result: model.TCPFailed, reason: reason, durationNS: finished.Sub(started).Nanoseconds(), started: started, finished: finished, exact: false}
+				return
+			}
+			results <- tcpFact{mode: s.mode, endpoint: remote, result: model.TCPAccepted, durationNS: finished.Sub(started).Nanoseconds(), started: started, finished: finished, exact: true, conn: conn}
+		}(s)
+	}
+	out := make([]tcpFact, 0, len(strategies))
+	for range strategies {
+		out = append(out, <-results)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].endpoint.address.Is4() != out[j].endpoint.address.Is4() {
+			return out[i].endpoint.address.Is4()
+		}
+		if c := out[i].endpoint.address.Compare(out[j].endpoint.address); c != 0 {
+			return c < 0
+		}
+		if out[i].endpoint.port != out[j].endpoint.port {
+			return out[i].endpoint.port < out[j].endpoint.port
+		}
+		return out[i].mode < out[j].mode
+	})
+	return out
+}
+
+func exactRemoteEndpoint(conn net.Conn) (endpointKey, bool) {
+	if conn == nil {
+		return endpointKey{}, false
+	}
+	remote, ok := conn.RemoteAddr().(*net.TCPAddr)
+	if !ok || remote == nil || remote.Port <= 0 || remote.Port > 65535 {
+		return endpointKey{}, false
+	}
+	address, ok := netip.AddrFromSlice(remote.IP)
+	if !ok || !address.IsValid() {
+		return endpointKey{}, false
+	}
+	return endpointKey{address: address.Unmap(), port: uint16(remote.Port)}, true
+}
+
+type peerFact struct {
+	fingerprint string
+	count       uint64
+	notBefore   time.Time
+	notAfter    time.Time
+	sanType     model.SANType
+	sanCount    uint64
+	dnsSANCount uint64
+}
+
+type tlsFact struct {
+	mode             attemptMode
+	endpoint         endpointKey
+	result           model.TLSTransportResult
+	reason           string
+	protocolVersion  string
+	cipherSuite      string
+	negotiatedALPN   string
+	sniSent          string
+	durationNS       int64
+	peer             *peerFact
+	verification     model.CertificateVerificationResult
+	verificationTime time.Time
+	trustSource      model.TrustSource
+	tlsConn          *tls.Conn
+}
+
+func executeTLS(parent context.Context, endpoint endpointKey, hostname string, conn net.Conn, roots *x509.CertPool, trustSource model.TrustSource, now func() time.Time) tlsFact {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if now == nil {
+		now = time.Now
+	}
+	started := now().UTC()
+	fact := tlsFact{endpoint: endpoint, result: model.TLSTransportFailed, reason: "tls_failed", trustSource: trustSource, verification: model.CertVerifierUnavailable, verificationTime: started}
+	if conn == nil {
+		return fact
+	}
+	ctx, cancel := context.WithTimeout(parent, tlsTimeout)
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+		defer conn.SetDeadline(time.Time{})
+	}
+	tlsConn := tls.Client(conn, &tls.Config{ServerName: hostname, InsecureSkipVerify: true, NextProtos: []string{"http/1.1"}}) // explicit verification follows below
+	handshakeDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-handshakeDone:
+		}
+	}()
+	err := tlsConn.HandshakeContext(ctx)
+	deadlineExceeded := errors.Is(ctx.Err(), context.DeadlineExceeded)
+	close(handshakeDone)
+	cancel()
+	finished := now().UTC()
+	if finished.Before(started) {
+		finished = started
+	}
+	fact.durationNS = finished.Sub(started).Nanoseconds()
+	state := tlsConn.ConnectionState()
+	if err != nil {
+		if deadlineExceeded {
+			fact.result, fact.reason = model.TLSTransportTimedOut, "tls_timeout"
+		} else {
+			fact.result, fact.reason = normalizeTLSError(err)
+		}
+	} else {
+		fact.result = model.TLSTransportCompleted
+		fact.reason = ""
+		fact.protocolVersion = tlsVersionToken(state.Version)
+		fact.cipherSuite = tls.CipherSuiteName(state.CipherSuite)
+		fact.negotiatedALPN = state.NegotiatedProtocol
+		fact.sniSent = hostname
+	}
+	if len(state.PeerCertificates) > 0 {
+		leaf := state.PeerCertificates[0]
+		fact.peer = summarizePeer(leaf, uint64(len(state.PeerCertificates)))
+		fact.verificationTime = started.UTC()
+		selectedRoots := roots
+		if selectedRoots == nil {
+			selectedRoots, err = x509.SystemCertPool()
+			fact.trustSource = model.TrustSystem
+		}
+		if selectedRoots == nil {
+			fact.verification = model.CertVerifierUnavailable
+		} else {
+			intermediates := x509.NewCertPool()
+			for _, certificate := range state.PeerCertificates[1:] {
+				intermediates.AddCert(certificate)
+			}
+			_, verifyErr := leaf.Verify(x509.VerifyOptions{DNSName: hostname, Roots: selectedRoots, Intermediates: intermediates, CurrentTime: fact.verificationTime, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}})
+			fact.verification = normalizeVerification(leaf, verifyErr, fact.verificationTime)
+		}
+		if fact.verification == model.CertVerified && fact.result == model.TLSTransportCompleted {
+			fact.tlsConn = tlsConn
+			return fact
+		}
+	}
+	_ = conn.Close()
+	return fact
+}
+
+func tlsVersionToken(version uint16) string {
+	switch version {
+	case tls.VersionTLS10:
+		return "TLS1.0"
+	case tls.VersionTLS11:
+		return "TLS1.1"
+	case tls.VersionTLS12:
+		return "TLS1.2"
+	case tls.VersionTLS13:
+		return "TLS1.3"
+	default:
+		return ""
+	}
+}
+
+func summarizePeer(leaf *x509.Certificate, count uint64) *peerFact {
+	digest := sha256.Sum256(leaf.Raw)
+	peer := &peerFact{fingerprint: "sha256:" + hex.EncodeToString(digest[:]), count: count, notBefore: leaf.NotBefore.UTC(), notAfter: leaf.NotAfter.UTC()}
+	if len(leaf.DNSNames) > 0 {
+		peer.sanType, peer.sanCount, peer.dnsSANCount = model.SANDNS, uint64(len(leaf.DNSNames)), uint64(len(leaf.DNSNames))
+	} else if len(leaf.IPAddresses) > 0 {
+		peer.sanType, peer.sanCount = model.SANIP, uint64(len(leaf.IPAddresses))
+	} else {
+		peer.sanType, peer.sanCount = model.SANOther, uint64(len(leaf.EmailAddresses)+len(leaf.URIs))
+	}
+	return peer
+}
+
+type httpFact struct {
+	mode           attemptMode
+	endpoint       endpointKey
+	completed      bool
+	resultKind     model.HTTPResultKind
+	statusCode     uint16
+	reason         string
+	durationNS     int64
+	redirectTarget *model.Target
+	dialCalls      int
+	requestCalls   int
+}
+
+func executeHTTP(parent context.Context, target requestTarget, endpoint endpointKey, rawConn net.Conn, tlsConn *tls.Conn, now func() time.Time) httpFact {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if now == nil {
+		now = time.Now
+	}
+	started := now().UTC()
+	fact := httpFact{endpoint: endpoint, reason: "http_failed"}
+	if target.persisted.Scheme == "https" && tlsConn == nil {
+		fact.reason = "tls_peer_unverified"
+		return fact
+	}
+	if target.persisted.Scheme == "http" && rawConn == nil {
+		fact.reason = "connection_unavailable"
+		return fact
+	}
+	transport := &http.Transport{Proxy: nil, DisableCompression: true, DisableKeepAlives: true, MaxResponseHeaderBytes: maxResponseHeaderBytes}
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	transport.Protocols = protocols
+	var mu sync.Mutex
+	used := false
+	dialCalls := 0
+	useConnection := func(conn net.Conn) func(context.Context, string, string) (net.Conn, error) {
+		return func(_ context.Context, _, _ string) (net.Conn, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			dialCalls++
+			if used {
+				return nil, errors.New("routedoc one-use connection exhausted")
+			}
+			used = true
+			return conn, nil
+		}
+	}
+	if target.persisted.Scheme == "http" {
+		transport.DialContext = useConnection(rawConn)
+	} else {
+		transport.DialTLSContext = func(_ context.Context, _, _ string) (net.Conn, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			dialCalls++
+			if used {
+				return nil, errors.New("routedoc one-use TLS connection exhausted")
+			}
+			used = true
+			return tlsConn, nil
+		}
+		transport.DialContext = func(context.Context, string, string) (net.Conn, error) {
+			return nil, errors.New("routedoc unexpected HTTPS dial")
+		}
+	}
+	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	ctx, cancel := context.WithTimeout(parent, httpTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.requestURL.String(), nil)
+	if err != nil {
+		fact.reason = "http_failed"
+		return fact
+	}
+	req.Header.Set("User-Agent", "RouteDoctor/1")
+	fact.requestCalls++
+	resp, err := client.Do(req)
+	mu.Lock()
+	fact.dialCalls = dialCalls
+	mu.Unlock()
+	if err != nil {
+		fact.reason = normalizeHTTPError(err)
+		transport.CloseIdleConnections()
+		return fact
+	}
+	fact.completed = true
+	fact.resultKind = model.HTTPResponse
+	if resp.StatusCode >= 100 && resp.StatusCode <= 999 {
+		fact.statusCode = uint16(resp.StatusCode)
+	}
+	if resp.StatusCode >= 300 && resp.StatusCode <= 399 {
+		if location := resp.Header.Get("Location"); location != "" {
+			if locationURL, parseErr := url.Parse(location); parseErr == nil {
+				resolved := resp.Request.URL.ResolveReference(locationURL)
+				if parsedLocation, targetErr := parseTarget(resolved.String()); targetErr == nil {
+					fact.resultKind = model.HTTPRedirect
+					fact.redirectTarget = &parsedLocation.persisted
+				}
+			}
+		}
+	}
+	_, _ = io.CopyN(io.Discard, resp.Body, maxResponseBodyPrefix)
+	_ = resp.Body.Close()
+	transport.CloseIdleConnections()
+	finished := now().UTC()
+	if finished.Before(started) {
+		finished = started
+	}
+	fact.durationNS = finished.Sub(started).Nanoseconds()
+	fact.reason = ""
+	return fact
+}
