@@ -9,7 +9,15 @@ import (
 )
 
 func isClientReport(v model.ValidatedEvaluatedRun) bool {
-	return strings.Contains(v.Value().Evidence.Producer.Version, "milestone1")
+	if strings.Contains(v.Value().Evidence.Producer.Version, "milestone1") {
+		return true
+	}
+	for _, definition := range v.Value().Evidence.CheckDefinitions {
+		if definition.Kind == model.CheckHTTP {
+			return true
+		}
+	}
+	return false
 }
 
 func reportClientConcise(w io.Writer, v model.ValidatedEvaluatedRun) error {
