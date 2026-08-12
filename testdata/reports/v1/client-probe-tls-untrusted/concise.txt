@@ -1,13 +1,5 @@
-RouteDoctor client probe report
-Target: https://example.test/
-Vantages: 1  Endpoint branches: 1
-ENDPOINT BRANCHES
-- branch-000001 endpoint=192.0.2.1:443
-  CHECK TCP_CONNECTION: COMPLETED PASS
-  CHECK TLS_TRANSPORT: COMPLETED PASS
-  CHECK TLS_PEER: COMPLETED PASS
-  CHECK CERTIFICATE_VERIFICATION: COMPLETED FAIL reason=untrusted_issuer
-  CHECK HTTP: NOT_RUN SKIPPED reason=tls_peer_unverified
-UNATTRIBUTED CHECK SYSTEM_RESOLUTION: COMPLETED/PASS reason=
-UNATTRIBUTED CHECK TCP_CONNECTION: NOT_RUN/SKIPPED reason=resolution_failed
-TLS certificate is untrusted (issuer not trusted).
+RouteDoctor — https://example.test/
+
+DNS    ✓ 1 IPv4 address
+IPv4   ✗ TCP → TLS → certificate (not trusted)
+Blocked at certificate verification.
