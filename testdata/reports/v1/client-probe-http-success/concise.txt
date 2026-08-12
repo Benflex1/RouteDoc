@@ -1,14 +1,7 @@
-RouteDoctor client probe report
-Target: http://example.test/
-Vantages: 1  Endpoint branches: 1
-ENDPOINT BRANCHES
-- branch-000001 endpoint=192.0.2.1:80
-  CHECK TCP_CONNECTION: COMPLETED PASS
-  CHECK TLS_TRANSPORT: NOT_RUN SKIPPED reason=not_applicable
-  CHECK TLS_PEER: NOT_RUN SKIPPED reason=not_applicable
-  CHECK CERTIFICATE_VERIFICATION: NOT_RUN SKIPPED reason=not_applicable
-  CHECK HTTP: COMPLETED PASS status=200
-UNATTRIBUTED CHECK SYSTEM_RESOLUTION: COMPLETED/PASS reason=
-UNATTRIBUTED CHECK TCP_CONNECTION: NOT_RUN/SKIPPED reason=resolution_failed
+RouteDoctor — http://example.test/
+
+DNS    ✓ 1 IPv4 address
+IPv4   ✓ TCP → HTTP 200
+
 Service is reachable.
 HTTP 200 received.
