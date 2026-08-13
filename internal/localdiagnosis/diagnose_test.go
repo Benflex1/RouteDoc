@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"strings"
 	"testing"
 
 	"routedoc/internal/clientprobe"
 	"routedoc/internal/model"
+	"routedoc/internal/render"
 	"routedoc/internal/schema/v1"
 )
 
@@ -115,6 +117,59 @@ func TestDiagnoseRetainsListenerInventoryWhenNamespaceIdentityIsUnavailable(t *t
 	}
 }
 
+func TestDiagnoseWildcardListenerCoversIPv4TargetWithoutFalseAbsence(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) }))
+	defer server.Close()
+	target, err := clientprobe.ParseTarget(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs := wildcardProcFixture(target.EffectivePort)
+	v, err := DiagnoseWith(context.Background(), server.URL, model.Producer{Name: "routedoc", Version: "test", Build: "test"}, fs, clientprobe.Diagnose)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := v.Value()
+	wildcardObserved := false
+	wildcardIPv6Observed := false
+	for _, entity := range r.Evidence.Entities {
+		if entity.Kind != model.EntityListener || entity.Identity.Listener == nil {
+			continue
+		}
+		switch entity.Identity.Listener.Endpoint.Address {
+		case netip.MustParseAddr("0.0.0.0"):
+			wildcardObserved = true
+		case netip.MustParseAddr("::"):
+			wildcardIPv6Observed = true
+		}
+	}
+	if !wildcardObserved || !wildcardIPv6Observed {
+		t.Fatalf("wildcard listener inventory was not retained: ipv4=%t ipv6=%t", wildcardObserved, wildcardIPv6Observed)
+	}
+	if got := countObservationKind(r.Evidence.Observations, model.ObservationListenerInventoryResult); got != 6 {
+		t.Fatalf("listener binding bucket evidence count = %d, want 6", got)
+	}
+	for _, finding := range r.Findings {
+		if finding.TitleCode == model.TitleNoMatchingListenerVisible {
+			t.Fatalf("wildcard listener produced false absence blocker: %#v", finding)
+		}
+	}
+	var output strings.Builder
+	if err := render.Report(&output, v, render.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "Local service is reachable.") {
+		t.Fatalf("concise output = %q", output.String())
+	}
+	b, issues := v1.EncodeCanonical(v)
+	if len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	if strings.Contains(string(b), string(model.TitleNoMatchingListenerVisible)) {
+		t.Fatalf("structured report contains false absence blocker: %s", b)
+	}
+}
+
 func TestParseTargetKeepsExistingURLSemantics(t *testing.T) {
 	target, err := clientprobe.ParseTarget("HTTP://LOCALHOST:8080/path?x=1#fragment")
 	if err != nil {
@@ -132,6 +187,14 @@ func procFixture(port uint16, inode uint64) *fakeProcFS {
 	fs := newFakeProcFS()
 	fs.files["net/tcp"] = []byte(fmt.Sprintf("  sl  local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n   0: 0100007F:%04X 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 %d 1\n", port, inode))
 	fs.files["net/tcp6"] = []byte("  sl  local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n")
+	fs.inodes["self/ns/net"] = 77
+	return fs
+}
+
+func wildcardProcFixture(port uint16) *fakeProcFS {
+	fs := newFakeProcFS()
+	fs.files["net/tcp"] = []byte(fmt.Sprintf("  sl  local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n   0: 00000000:%04X 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 12345 1\n", port))
+	fs.files["net/tcp6"] = []byte(fmt.Sprintf("  sl  local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n   0: 00000000000000000000000000000000:%04X 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 22345 1\n", port))
 	fs.inodes["self/ns/net"] = 77
 	return fs
 }

@@ -1,6 +1,8 @@
 package listener
 
 import (
+	"net/netip"
+
 	"routedoc/internal/model"
 	"routedoc/internal/rules/ruleapi"
 )
@@ -13,9 +15,13 @@ func (noMatchingListenerVisible) ID() model.RuleID {
 }
 func (noMatchingListenerVisible) Evaluate(v model.ValidatedEvidenceRun) []ruleapi.RuleCandidate {
 	r := v.Value()
+	localDiagnosis := r.RequestedScope.Kind == model.ScopeLocalOrigin
 	out := []ruleapi.RuleCandidate{}
 	for _, vis := range r.VisibilityAssessments {
-		if vis.Scope.Listener == nil || !model.ListenerAbsenceEvidenceValid(r, vis, r.Target.EffectivePort) {
+		if vis.Scope.Listener == nil || (localDiagnosis && !scopeAppliesToTarget(r, vis.Scope.Listener.AddressFamily)) || !model.ListenerAbsenceEvidenceValid(r, vis, r.Target.EffectivePort) {
+			continue
+		}
+		if localDiagnosis && hasCompatibleListener(r, *vis.Scope.Listener) {
 			continue
 		}
 		s := vis.Scope.Listener
@@ -31,6 +37,108 @@ func (noMatchingListenerVisible) Evaluate(v model.ValidatedEvidenceRun) []ruleap
 	}
 	return out
 }
+
+// hasCompatibleListener prevents an empty binding bucket from becoming an
+// absence conclusion when another observed listener covers the target
+// destination. The inventory buckets remain separate evidence; compatibility
+// is considered only while deciding whether to emit this blocker.
+func hasCompatibleListener(r model.EvidenceRun, scope model.ListenerVisibilityScope) bool {
+	destinations := targetDestinations(r, scope.AddressFamily)
+	if len(destinations) == 0 {
+		return false
+	}
+	entities := map[model.EntityID]model.Entity{}
+	for _, entity := range r.Entities {
+		entities[entity.EntityID] = entity
+	}
+	for _, observation := range r.Observations {
+		if observation.Kind != model.ObservationListenerInventory || observation.Payload.Listener == nil {
+			continue
+		}
+		entry := observation.Payload.Listener
+		if entry.NamespaceEntityID != scope.NamespaceEntityID || entry.Protocol != scope.Protocol || entry.Port != scope.PortStart {
+			continue
+		}
+		entity, ok := entities[entry.ListenerEntityID]
+		if !ok || entity.Identity.Listener == nil {
+			continue
+		}
+		endpoint := entity.Identity.Listener.Endpoint
+		if endpoint.Transport != model.TransportTCP || endpoint.Port != scope.PortStart || addressFamily(endpoint.Address) != scope.AddressFamily {
+			continue
+		}
+		for _, destination := range destinations {
+			if bindingCovers(entry.BindSemantics, endpoint.Address, destination) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func scopeAppliesToTarget(r model.EvidenceRun, family model.AddressFamily) bool {
+	if len(targetDestinations(r, family)) > 0 {
+		return true
+	}
+	if address, err := netip.ParseAddr(r.Target.Hostname); err == nil {
+		return addressFamily(address) == family
+	}
+	for _, entity := range r.Entities {
+		if entity.Kind == model.EntitySocketEndpoint && entity.Identity.Endpoint != nil && entity.Identity.Endpoint.Transport == model.TransportTCP && entity.Identity.Endpoint.Port == r.Target.EffectivePort {
+			return false
+		}
+	}
+	// Preserve the existing rule behavior for hostname-only evidence that does
+	// not expose a concrete destination address.
+	return true
+}
+
+func targetDestinations(r model.EvidenceRun, family model.AddressFamily) []netip.Addr {
+	result := []netip.Addr{}
+	for _, entity := range r.Entities {
+		if entity.Kind != model.EntitySocketEndpoint || entity.Identity.Endpoint == nil {
+			continue
+		}
+		endpoint := entity.Identity.Endpoint
+		if endpoint.Transport == model.TransportTCP && endpoint.Port == r.Target.EffectivePort && addressFamily(endpoint.Address) == family {
+			result = appendUniqueAddress(result, endpoint.Address)
+		}
+	}
+	if address, err := netip.ParseAddr(r.Target.Hostname); err == nil && addressFamily(address) == family {
+		result = appendUniqueAddress(result, address)
+	}
+	return result
+}
+
+func appendUniqueAddress(addresses []netip.Addr, address netip.Addr) []netip.Addr {
+	for _, existing := range addresses {
+		if existing == address {
+			return addresses
+		}
+	}
+	return append(addresses, address)
+}
+
+func addressFamily(address netip.Addr) model.AddressFamily {
+	if address.Is6() {
+		return model.AddressFamilyIPv6
+	}
+	return model.AddressFamilyIPv4
+}
+
+func bindingCovers(binding model.BindSemantics, listener, destination netip.Addr) bool {
+	switch binding {
+	case model.BindExact:
+		return listener == destination
+	case model.BindWildcard:
+		return listener.IsUnspecified()
+	case model.BindLoopback:
+		return destination == netip.MustParseAddr("127.0.0.1") || destination == netip.MustParseAddr("::1")
+	default:
+		return false
+	}
+}
+
 func branchesFor(r model.EvidenceRun, id model.VisibilityID) ([]model.BranchID, []model.PathPosition) {
 	var b []model.BranchID
 	var p []model.PathPosition
