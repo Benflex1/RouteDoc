@@ -20,6 +20,28 @@ func TestNoMatchingListenerCompleteScope(t *testing.T) {
 	}
 }
 
+func TestBindingCompatibilityForLocalDiagnosis(t *testing.T) {
+	cases := []struct {
+		name        string
+		binding     model.BindSemantics
+		listener    netip.Addr
+		destination netip.Addr
+		compatible  bool
+	}{
+		{name: "IPv4 wildcard covers loopback destination", binding: model.BindWildcard, listener: netip.MustParseAddr("0.0.0.0"), destination: netip.MustParseAddr("127.0.0.1"), compatible: true},
+		{name: "IPv6 wildcard covers loopback destination", binding: model.BindWildcard, listener: netip.MustParseAddr("::"), destination: netip.MustParseAddr("::1"), compatible: true},
+		{name: "exact listener covers exact destination", binding: model.BindExact, listener: netip.MustParseAddr("10.0.0.2"), destination: netip.MustParseAddr("10.0.0.2"), compatible: true},
+		{name: "loopback does not cover non-loopback destination", binding: model.BindLoopback, listener: netip.MustParseAddr("127.0.0.1"), destination: netip.MustParseAddr("10.0.0.2"), compatible: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := bindingCovers(tc.binding, tc.listener, tc.destination); got != tc.compatible {
+				t.Fatalf("bindingCovers(%s, %s, %s) = %t, want %t", tc.binding, tc.listener, tc.destination, got, tc.compatible)
+			}
+		})
+	}
+}
+
 func TestNoMatchingListenerDoesNotTreatNonTargetEntryAsCompletedInventory(t *testing.T) {
 	// The old fixture workaround put one unrelated port-80 entry under a
 	// broad COMPLETE_FOR_SCOPE assessment. Architecture 1.2 requires a direct

@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"routedoc/internal/clientprobe"
+	"routedoc/internal/localdiagnosis"
 	"routedoc/internal/model"
 	"routedoc/internal/render"
 	"routedoc/internal/schema/v1"
@@ -22,12 +23,13 @@ const (
 )
 
 type App struct {
-	Args     []string
-	Stdin    io.Reader
-	Stdout   io.Writer
-	Stderr   io.Writer
-	ReadFile func(string) ([]byte, error)
-	Diagnose func(context.Context, string, model.Producer) (model.ValidatedEvaluatedRun, error)
+	Args          []string
+	Stdin         io.Reader
+	Stdout        io.Writer
+	Stderr        io.Writer
+	ReadFile      func(string) ([]byte, error)
+	Diagnose      func(context.Context, string, model.Producer) (model.ValidatedEvaluatedRun, error)
+	LocalDiagnose func(context.Context, string, model.Producer) (model.ValidatedEvaluatedRun, error)
 }
 
 func NewApp(args []string, in io.Reader, out, err io.Writer, read func(string) ([]byte, error)) *App {
@@ -43,7 +45,7 @@ func NewApp(args []string, in io.Reader, out, err io.Writer, read func(string) (
 	if read == nil {
 		read = os.ReadFile
 	}
-	return &App{Args: args, Stdin: in, Stdout: out, Stderr: err, ReadFile: read, Diagnose: clientprobe.Diagnose}
+	return &App{Args: args, Stdin: in, Stdout: out, Stderr: err, ReadFile: read, Diagnose: clientprobe.Diagnose, LocalDiagnose: localdiagnosis.Diagnose}
 }
 func (a *App) Run() int {
 	if len(a.Args) == 0 {
@@ -58,6 +60,8 @@ func (a *App) Run() int {
 		return a.validate()
 	case "version":
 		return a.version()
+	case "local":
+		return a.local()
 	default:
 		return a.probe()
 	}
@@ -69,7 +73,50 @@ func (a *App) usage(msg string) int {
 	fmt.Fprintln(a.Stderr, "       routedoc validate REPORT.json [--json]")
 	fmt.Fprintln(a.Stderr, "       routedoc version [--json]")
 	fmt.Fprintln(a.Stderr, "       routedoc URL [--verbose] [--json]")
+	fmt.Fprintln(a.Stderr, "       routedoc local URL [--verbose] [--json]")
 	return ExitUsage
+}
+
+func (a *App) local() int {
+	rawURL, verbose, jsonOut, ok := parseProbeArgs(a.Args[1:])
+	if !ok {
+		return a.usage("invalid local URL arguments")
+	}
+	if a.LocalDiagnose == nil {
+		return a.internalOutput()
+	}
+	v, err := a.LocalDiagnose(context.Background(), rawURL, model.Producer{Name: ProducerName, Version: ProducerVersion, Build: ProducerBuild})
+	if err != nil {
+		var input *clientprobe.InputError
+		if errors.As(err, &input) {
+			fmt.Fprintln(a.Stderr, input.Code)
+			return ExitUsage
+		}
+		if errors.Is(err, localdiagnosis.ErrUnsupportedPlatform) {
+			fmt.Fprintln(a.Stderr, err.Error())
+			return ExitData
+		}
+		return a.internalOutput()
+	}
+	if jsonOut {
+		b, issues := v1.EncodeCanonical(v)
+		if len(issues) > 0 {
+			return a.internalOutput()
+		}
+		if _, err := a.Stdout.Write(b); err != nil {
+			return ExitInternal
+		}
+	} else if err := render.Report(a.Stdout, v, render.Options{Verbose: verbose}); err != nil {
+		return ExitInternal
+	}
+	switch clientprobe.Status(v) {
+	case clientprobe.StatusSatisfied:
+		return ExitOK
+	case clientprobe.StatusBlocked:
+		return ExitBlocked
+	default:
+		return ExitData
+	}
 }
 
 func (a *App) probe() int {

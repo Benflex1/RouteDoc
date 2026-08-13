@@ -24,6 +24,18 @@ type requestTarget struct {
 	persisted  model.Target
 }
 
+// ParseTarget exposes the same normalization used by the client probe to
+// callers that need only the effective target, such as local inspection.
+// It intentionally returns the persisted target and does not create a second
+// URL parsing policy.
+func ParseTarget(raw string) (model.Target, error) {
+	target, err := parseTarget(raw)
+	if err != nil {
+		return model.Target{}, err
+	}
+	return target.persisted, nil
+}
+
 func parseTarget(raw string) (requestTarget, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u == nil || u.IsAbs() == false {
