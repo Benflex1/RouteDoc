@@ -34,7 +34,7 @@ RouteDoctor does not follow redirects. It records a safe, minimized redirect des
 Download the file for your operating system and architecture from the [GitHub Releases](https://github.com/Benflex1/RouteDoc/releases) page. For example, on Linux:
 
 ```bash
-VERSION=0.1.0
+VERSION=0.2.0
 curl -LO "https://github.com/Benflex1/RouteDoc/releases/download/v${VERSION}/routedoc_${VERSION}_linux_amd64"
 chmod +x "routedoc_${VERSION}_linux_amd64"
 sudo install "routedoc_${VERSION}_linux_amd64" /usr/local/bin/routedoc
@@ -63,6 +63,39 @@ The URL diagnosis command is the primary interface:
 ```text
 routedoc URL [--verbose] [--json]
 ```
+
+On Linux, use local diagnosis to supplement the client probe with evidence from
+the host's procfs:
+
+```text
+routedoc local URL [--verbose] [--json]
+```
+
+It checks listeners on the target TCP port, distinguishes exact, loopback, and
+wildcard bindings, best-effort identifies the owning process, and reports
+whether the client TCP connection and HTTP request succeed. For example:
+
+```bash
+routedoc local http://127.0.0.1:8080/
+```
+
+```text
+Listener   ✓ 127.0.0.1:8080
+Process    ✓ example-process
+TCP        ✓ connection accepted
+HTTP       ✓ 200
+Local service is reachable.
+```
+
+When a service is listening only on loopback, RouteDoctor explains that direct
+connections through non-loopback local addresses will not reach that listener.
+The `local` command is currently Linux-only because it reads
+`/proc/net/tcp`, `/proc/net/tcp6`, and, when readable,
+`/proc/<pid>/fd`. It does not use `sudo` or automatically escalate
+privileges. If process ownership cannot be observed, it reports ownership as
+unavailable rather than treating that as proof that no process owns the socket.
+The normal `routedoc URL` command remains the cross-platform client-side
+diagnosis command.
 
 For saved reports:
 
